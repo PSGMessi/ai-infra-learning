@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-07-26T15:54:01+08:00",
-  "updated_at": "2026-08-03T11:50:29+08:00",
+  "updated_at": "2026-08-05T16:26:40+08:00",
   "nodes": {
     "Compute-Communication Overlap": {
       "concept": "Compute-Communication Overlap",
@@ -1318,26 +1318,26 @@
       "mastery": 1,
       "needs_review": false,
       "first_seen": "2026-07-29",
-      "last_seen": "2026-07-29",
+      "last_seen": "2026-08-05",
       "next_review": "2026-07-30",
       "evidence": [],
       "recommendations": [
         {
-          "target": "PyTorch",
+          "target": "CUDA Stream",
           "kind": "prerequisite",
-          "reason": "理解Tensor、Autograd和Module实现基础",
+          "reason": "理解MoE异步通信与事件依赖",
           "status": "open"
         },
         {
-          "target": "Expert Parallel",
+          "target": "All-to-All-v",
           "kind": "peer",
-          "reason": "深入MoE跨GPU专家分布和并行布局",
+          "reason": "比较动态Split和渐进接收的Dispatcher实现",
           "status": "open"
         },
         {
-          "target": "All-to-All",
+          "target": "Nsight Systems",
           "kind": "downstream",
-          "reason": "深入Token Dispatch/Combine的核心通信原语",
+          "reason": "验证通信计算重叠与资源争用",
           "status": "open"
         }
       ],
@@ -1364,6 +1364,16 @@
             "body": "<svg viewBox=\"0 0 680 420\" width=\"100%\" role=\"img\" xmlns=\"http://www.w3.org/2000/svg\"><title>MoE Layer 的 Route、Dispatch、Compute、Combine 数据流</title><desc>输入token隐藏状态经过router得到专家分数和Top-k选择，按专家重排分发，专家执行MLP，再反向通信和反重排，按路由权重合并为原token顺序。</desc><defs><marker id=\"arrow\" viewBox=\"0 0 10 10\" refX=\"8\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M2 1L8 5L2 9\" fill=\"none\" stroke=\"context-stroke\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></marker></defs><text x=\"40\" y=\"28\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"500\" fill=\"#26215C\">一个 MoE FFN 的完整前向：Route → Dispatch → Compute → Combine</text><g font-family=\"sans-serif\"><rect x=\"40\" y=\"62\" width=\"118\" height=\"64\" rx=\"10\" fill=\"#E6F1FB\" stroke=\"#185FA5\" stroke-width=\"0.5\"/><text x=\"99\" y=\"84\" font-size=\"13\" font-weight=\"500\" fill=\"#0C447C\" text-anchor=\"middle\">Hidden states</text><text x=\"99\" y=\"105\" font-size=\"11\" fill=\"#185FA5\" text-anchor=\"middle\">X: [T, H]</text><rect x=\"190\" y=\"62\" width=\"118\" height=\"64\" rx=\"10\" fill=\"#EEEDFE\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"249\" y=\"84\" font-size=\"13\" font-weight=\"500\" fill=\"#26215C\" text-anchor=\"middle\">1. Route</text><text x=\"249\" y=\"105\" font-size=\"11\" fill=\"#534AB7\" text-anchor=\"middle\">logits [T,E] → top-k</text><rect x=\"340\" y=\"62\" width=\"118\" height=\"64\" rx=\"10\" fill=\"#EEEDFE\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"399\" y=\"84\" font-size=\"13\" font-weight=\"500\" fill=\"#26215C\" text-anchor=\"middle\">2. Dispatch</text><text x=\"399\" y=\"105\" font-size=\"11\" fill=\"#534AB7\" text-anchor=\"middle\">permute + all-to-all</text><rect x=\"490\" y=\"62\" width=\"150\" height=\"64\" rx=\"10\" fill=\"#E1F5EE\" stroke=\"#0F6E56\" stroke-width=\"0.5\"/><text x=\"565\" y=\"84\" font-size=\"13\" font-weight=\"500\" fill=\"#04342C\" text-anchor=\"middle\">3. Expert compute</text><text x=\"565\" y=\"105\" font-size=\"11\" fill=\"#0F6E56\" text-anchor=\"middle\">grouped MLP / GEMM</text></g><g stroke=\"#5F5E5A\" stroke-width=\"1.5\"><path d=\"M158 94 L186 94\" fill=\"none\" marker-end=\"url(#arrow)\"/><path d=\"M308 94 L336 94\" fill=\"none\" marker-end=\"url(#arrow)\"/><path d=\"M458 94 L486 94\" fill=\"none\" marker-end=\"url(#arrow)\"/></g><rect x=\"40\" y=\"160\" width=\"600\" height=\"106\" rx=\"14\" fill=\"#F1EFE8\" stroke=\"#5F5E5A\" stroke-width=\"0.5\"/><text x=\"60\" y=\"184\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#2C2C2A\">统一例子：T=6 tokens，E=4 experts，k=2 → 12 个 token-expert assignments</text><g font-family=\"sans-serif\" font-size=\"11\" text-anchor=\"middle\"><g fill=\"#B5D4F4\" stroke=\"#185FA5\" stroke-width=\"0.5\"><rect x=\"60\" y=\"202\" width=\"48\" height=\"30\" rx=\"6\"/><rect x=\"118\" y=\"202\" width=\"48\" height=\"30\" rx=\"6\"/><rect x=\"176\" y=\"202\" width=\"48\" height=\"30\" rx=\"6\"/><rect x=\"234\" y=\"202\" width=\"48\" height=\"30\" rx=\"6\"/><rect x=\"292\" y=\"202\" width=\"48\" height=\"30\" rx=\"6\"/><rect x=\"350\" y=\"202\" width=\"48\" height=\"30\" rx=\"6\"/></g><text x=\"84\" y=\"221\" fill=\"#0C447C\">t0</text><text x=\"142\" y=\"221\" fill=\"#0C447C\">t1</text><text x=\"200\" y=\"221\" fill=\"#0C447C\">t2</text><text x=\"258\" y=\"221\" fill=\"#0C447C\">t3</text><text x=\"316\" y=\"221\" fill=\"#0C447C\">t4</text><text x=\"374\" y=\"221\" fill=\"#0C447C\">t5</text><g fill=\"#CECBF6\" stroke=\"#534AB7\" stroke-width=\"0.5\"><rect x=\"430\" y=\"194\" width=\"42\" height=\"22\" rx=\"5\"/><rect x=\"478\" y=\"194\" width=\"42\" height=\"22\" rx=\"5\"/><rect x=\"526\" y=\"194\" width=\"42\" height=\"22\" rx=\"5\"/><rect x=\"574\" y=\"194\" width=\"42\" height=\"22\" rx=\"5\"/><rect x=\"430\" y=\"222\" width=\"42\" height=\"22\" rx=\"5\"/><rect x=\"478\" y=\"222\" width=\"42\" height=\"22\" rx=\"5\"/><rect x=\"526\" y=\"222\" width=\"42\" height=\"22\" rx=\"5\"/><rect x=\"574\" y=\"222\" width=\"42\" height=\"22\" rx=\"5\"/></g><text x=\"451\" y=\"209\" fill=\"#3C3489\">E0</text><text x=\"499\" y=\"209\" fill=\"#3C3489\">E0</text><text x=\"547\" y=\"209\" fill=\"#3C3489\">E0</text><text x=\"595\" y=\"209\" fill=\"#3C3489\">E1</text><text x=\"451\" y=\"237\" fill=\"#3C3489\">E1</text><text x=\"499\" y=\"237\" fill=\"#3C3489\">E2</text><text x=\"547\" y=\"237\" fill=\"#3C3489\">E3</text><text x=\"595\" y=\"237\" fill=\"#3C3489\">...</text></g><text x=\"60\" y=\"253\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#5F5E5A\">Dispatcher 按 expert id 重排，使同一专家的 token 在内存连续；跨 EP rank 时再执行 All-to-All。</text><rect x=\"40\" y=\"298\" width=\"176\" height=\"70\" rx=\"10\" fill=\"#E1F5EE\" stroke=\"#0F6E56\" stroke-width=\"0.5\"/><text x=\"128\" y=\"321\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#04342C\" text-anchor=\"middle\">Local experts</text><text x=\"128\" y=\"343\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#0F6E56\" text-anchor=\"middle\">每专家处理变长 token batch</text><rect x=\"252\" y=\"298\" width=\"176\" height=\"70\" rx=\"10\" fill=\"#EEEDFE\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"340\" y=\"321\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#26215C\" text-anchor=\"middle\">4. Combine</text><text x=\"340\" y=\"343\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#534AB7\" text-anchor=\"middle\">return all-to-all + unpermute</text><rect x=\"464\" y=\"298\" width=\"176\" height=\"70\" rx=\"10\" fill=\"#E6F1FB\" stroke=\"#185FA5\" stroke-width=\"0.5\"/><text x=\"552\" y=\"321\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#0C447C\" text-anchor=\"middle\">Output [T,H]</text><text x=\"552\" y=\"343\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#185FA5\" text-anchor=\"middle\">Σ gate·expert(x)，恢复原顺序</text><path d=\"M216 333 L248 333\" fill=\"none\" stroke=\"#5F5E5A\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><path d=\"M428 333 L460 333\" fill=\"none\" stroke=\"#5F5E5A\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><text x=\"40\" y=\"404\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#A32D2D\">动态路由使每个专家收到的 token 数不同：负载不均、容量溢出和小 GEMM 是 MoE 的核心系统难点。</text></svg>"
           },
           {
+            "title": "Grouped GEMM 深入：从变长 Token 到 Tile Scheduler",
+            "type": "text",
+            "body": "Grouped GEMM 先将同一 Expert 的 Token 打包到连续 packed_X[ΣT_e,H]，用 expert_offsets 和每组 A/B/C 指针、M_e/N/K 描述多个独立 GEMM。单个或少量 Persistent Kernel 将所有 Expert 输出切成 Tensor Core tiles；CTA 根据 prefix_tiles 把全局 tile_id 映射到 Expert，再加载该 Expert 的独立权重执行。它减少 launch、提高 tile 并行度并避免 pad-to-capacity 的无效 FLOP，但不能消除 Rank 间负载不均、热门 Expert 长尾和通信/GEMM 的 SM/HBM 争用。"
+          },
+          {
+            "title": "Grouped GEMM 打包与 Tile 调度图",
+            "type": "svg",
+            "body": "<svg viewBox=\"0 0 680 360\" width=\"100%\" role=\"img\" xmlns=\"http://www.w3.org/2000/svg\"><title>Grouped GEMM 的打包与 Tile 调度</title><desc>不同专家的变长 token 输入被打包到连续缓冲区，通过 offsets 和 descriptors 描述多个独立 GEMM，再由一个 kernel 的 tile scheduler 分配给 CTA 执行。</desc><defs><marker id=\"arrow\" viewBox=\"0 0 10 10\" refX=\"8\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M2 1L8 5L2 9\" fill=\"none\" stroke=\"context-stroke\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></marker></defs><text x=\"40\" y=\"28\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"500\" fill=\"#26215C\">Grouped GEMM：一组独立 GEMM，共享一次调度入口</text><rect x=\"40\" y=\"58\" width=\"175\" height=\"105\" rx=\"12\" fill=\"#E6F1FB\" stroke=\"#185FA5\" stroke-width=\"0.5\"/><text x=\"58\" y=\"82\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#0C447C\">Packed token buffer</text><rect x=\"58\" y=\"96\" width=\"46\" height=\"40\" rx=\"6\" fill=\"#B5D4F4\"/><rect x=\"106\" y=\"96\" width=\"76\" height=\"40\" rx=\"6\" fill=\"#85B7EB\"/><rect x=\"184\" y=\"96\" width=\"16\" height=\"40\" rx=\"6\" fill=\"#378ADD\"/><text x=\"81\" y=\"120\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#042C53\" text-anchor=\"middle\">E0:2</text><text x=\"144\" y=\"120\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#042C53\" text-anchor=\"middle\">E1:5</text><text x=\"192\" y=\"120\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#F8FAFC\" text-anchor=\"middle\">1</text><text x=\"58\" y=\"151\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#185FA5\">offsets = [0,2,7,8]</text><path d=\"M215 110 L264 110\" fill=\"none\" stroke=\"#534AB7\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><rect x=\"268\" y=\"58\" width=\"150\" height=\"105\" rx=\"12\" fill=\"#EEEDFE\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"286\" y=\"82\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#26215C\">Descriptors</text><text x=\"286\" y=\"106\" font-family=\"monospace\" font-size=\"11\" fill=\"#534AB7\">G0: M=2,N=8,K=4</text><text x=\"286\" y=\"126\" font-family=\"monospace\" font-size=\"11\" fill=\"#534AB7\">G1: M=5,N=8,K=4</text><text x=\"286\" y=\"146\" font-family=\"monospace\" font-size=\"11\" fill=\"#534AB7\">G2: M=1,N=8,K=4</text><path d=\"M418 110 L467 110\" fill=\"none\" stroke=\"#0F6E56\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><rect x=\"471\" y=\"58\" width=\"169\" height=\"105\" rx=\"12\" fill=\"#E1F5EE\" stroke=\"#0F6E56\" stroke-width=\"0.5\"/><text x=\"489\" y=\"82\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#04342C\">One grouped kernel</text><text x=\"489\" y=\"106\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#0F6E56\">tile_id → expert_id</text><text x=\"489\" y=\"126\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#0F6E56\">CTA loads expert pointers</text><text x=\"489\" y=\"146\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#0F6E56\">Tensor Core accumulates K</text><rect x=\"40\" y=\"206\" width=\"600\" height=\"112\" rx=\"14\" fill=\"#F1EFE8\" stroke=\"#5F5E5A\" stroke-width=\"0.5\"/><text x=\"58\" y=\"232\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#2C2C2A\">关键边界</text><text x=\"58\" y=\"258\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#5F5E5A\">它减少 launch、改善 tile 填充和权重调度；不消除不同 Expert 的独立权重，也不消除 Rank 间负载不均。</text><text x=\"58\" y=\"282\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#5F5E5A\">若 T_e 极小，总 tile 数仍不足；若少数 T_e 极大，尾部仍由热门 Expert 决定。</text><text x=\"58\" y=\"306\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#A32D2D\">性能应同时看 grouped GEMM 时间、每 Expert M 分布、Tensor Core active、HBM 带宽与最慢 Rank 尾部。</text></svg>"
+          },
+          {
             "title": "Router 与 Top-k",
             "type": "text",
             "body": "Router将X[T,H]投影为logits[T,E]，经softmax或其他评分函数选择Top-k，并对选中权重归一化。输出 y_t=Σ gate·Expert_e(x_t)。具体实现还可能使用sigmoid、group-limited routing、expert bias或aux-loss-free balancing。"
@@ -1379,9 +1389,34 @@
             "body": "f_e=Expert e实际assignment比例；p_e=Router对Expert e的平均概率质量。经典辅助损失可写为L_aux=α×E×Σ f_e p_e；另有Router Z-Loss约束logsumexp(logits)。系数过小会塌缩，过大会妨碍专家专门化。"
           },
           {
+            "title": "p_e 的计算与 f_e 的区别",
+            "type": "formula",
+            "body": "常见定义：P_{t,e}=softmax(router_logits_t)[e]，p_e=(1/T)×Σ_t P_{t,e}。例：4 Token 对 E0/E1/E2 的概率分别为[0.7,0.2,0.1]、[0.6,0.3,0.1]、[0.2,0.7,0.1]、[0.1,0.6,0.3]，则p=[0.40,0.45,0.15]。Top-1硬选择为[E0,E0,E1,E1]，f=[0.5,0.5,0]。p是可微的软概率质量，f是离散的实际Assignment比例；Top-2时f的常见分母为T×k。"
+          },
+          {
+            "title": "Router Z-Loss：尺度、饱和与梯度",
+            "type": "formula",
+            "body": "Softmax对共同偏移不敏感：softmax(l+c)=softmax(l)，但Logit差值放大如[2,1,0]→[20,10,0]会使概率接近one-hot，p(1-p)趋近0，Router难以纠错。定义z_t=logsumexp(l_t)，L_z=λ_z×mean_t(z_t²)，梯度∂L_z/∂l_{t,e}=(2λ_z/T)×z_t×softmax(l_t)_e。Z-Loss约束主任务看不见的绝对尺度/共同偏移，并间接抑制极端Logits；它不能替代负载均衡，常与Router FP32、稳定logsumexp、合理初始化和必要的clipping配合。"
+          },
+          {
             "title": "Expert Parallel 两次 All-to-All",
             "type": "svg",
             "body": "<svg viewBox=\"0 0 680 450\" width=\"100%\" role=\"img\" xmlns=\"http://www.w3.org/2000/svg\"><title>Expert Parallel 中两次 All-to-All 通信</title><desc>四个GPU各持有两个专家。原始token在各GPU上，第一次All-to-All按目标专家发送到专家所在GPU，本地Grouped GEMM后，第二次All-to-All把结果返回原始GPU并恢复token顺序。</desc><defs><marker id=\"arrow\" viewBox=\"0 0 10 10\" refX=\"8\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M2 1L8 5L2 9\" fill=\"none\" stroke=\"context-stroke\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></marker></defs><text x=\"40\" y=\"28\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"500\" fill=\"#26215C\">EP=4，E=8：每张 GPU 持有 2 个专家</text><g font-family=\"sans-serif\"><rect x=\"40\" y=\"58\" width=\"130\" height=\"82\" rx=\"12\" fill=\"#E6F1FB\" stroke=\"#185FA5\" stroke-width=\"0.5\"/><text x=\"105\" y=\"80\" font-size=\"13\" font-weight=\"500\" fill=\"#0C447C\" text-anchor=\"middle\">GPU 0</text><text x=\"105\" y=\"102\" font-size=\"11\" fill=\"#185FA5\" text-anchor=\"middle\">Experts 0,1</text><text x=\"105\" y=\"122\" font-size=\"11\" fill=\"#185FA5\" text-anchor=\"middle\">origin tokens A</text><rect x=\"197\" y=\"58\" width=\"130\" height=\"82\" rx=\"12\" fill=\"#E6F1FB\" stroke=\"#185FA5\" stroke-width=\"0.5\"/><text x=\"262\" y=\"80\" font-size=\"13\" font-weight=\"500\" fill=\"#0C447C\" text-anchor=\"middle\">GPU 1</text><text x=\"262\" y=\"102\" font-size=\"11\" fill=\"#185FA5\" text-anchor=\"middle\">Experts 2,3</text><text x=\"262\" y=\"122\" font-size=\"11\" fill=\"#185FA5\" text-anchor=\"middle\">origin tokens B</text><rect x=\"354\" y=\"58\" width=\"130\" height=\"82\" rx=\"12\" fill=\"#E6F1FB\" stroke=\"#185FA5\" stroke-width=\"0.5\"/><text x=\"419\" y=\"80\" font-size=\"13\" font-weight=\"500\" fill=\"#0C447C\" text-anchor=\"middle\">GPU 2</text><text x=\"419\" y=\"102\" font-size=\"11\" fill=\"#185FA5\" text-anchor=\"middle\">Experts 4,5</text><text x=\"419\" y=\"122\" font-size=\"11\" fill=\"#185FA5\" text-anchor=\"middle\">origin tokens C</text><rect x=\"511\" y=\"58\" width=\"129\" height=\"82\" rx=\"12\" fill=\"#E6F1FB\" stroke=\"#185FA5\" stroke-width=\"0.5\"/><text x=\"575\" y=\"80\" font-size=\"13\" font-weight=\"500\" fill=\"#0C447C\" text-anchor=\"middle\">GPU 3</text><text x=\"575\" y=\"102\" font-size=\"11\" fill=\"#185FA5\" text-anchor=\"middle\">Experts 6,7</text><text x=\"575\" y=\"122\" font-size=\"11\" fill=\"#185FA5\" text-anchor=\"middle\">origin tokens D</text></g><text x=\"40\" y=\"180\" font-family=\"sans-serif\" font-size=\"14\" font-weight=\"500\" fill=\"#3C3489\">1. Dispatch All-to-All：按目标 Expert Owner 重分布</text><path d=\"M105 145 C160 214 470 214 575 145\" fill=\"none\" stroke=\"#534AB7\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><path d=\"M262 145 C280 190 400 198 419 145\" fill=\"none\" stroke=\"#534AB7\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><path d=\"M419 145 C395 225 175 225 105 145\" fill=\"none\" stroke=\"#534AB7\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><path d=\"M575 145 C535 205 310 210 262 145\" fill=\"none\" stroke=\"#534AB7\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><rect x=\"40\" y=\"232\" width=\"600\" height=\"78\" rx=\"13\" fill=\"#E1F5EE\" stroke=\"#0F6E56\" stroke-width=\"0.5\"/><text x=\"60\" y=\"256\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#04342C\">2. Local expert compute</text><text x=\"60\" y=\"278\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#0F6E56\">每张 GPU 收到所有来源中路由给本地专家的 token；按 expert 分段后执行 Sequential/Grouped GEMM。</text><text x=\"60\" y=\"298\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#0F6E56\">每专家 token 数不同 → GEMM shape 动态、负载由最慢 Rank 决定。</text><text x=\"40\" y=\"350\" font-family=\"sans-serif\" font-size=\"14\" font-weight=\"500\" fill=\"#3C3489\">3. Combine All-to-All：结果返回 Token Origin Rank</text><path d=\"M575 370 C500 420 180 420 105 370\" fill=\"none\" stroke=\"#534AB7\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><path d=\"M419 370 C395 410 285 410 262 370\" fill=\"none\" stroke=\"#534AB7\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><path d=\"M105 370 C175 435 365 430 419 370\" fill=\"none\" stroke=\"#534AB7\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><path d=\"M262 370 C320 430 520 425 575 370\" fill=\"none\" stroke=\"#534AB7\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><text x=\"40\" y=\"438\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#A32D2D\">Top-k=2 时每个 token 通常会产生 2 份 expert assignment；通信的是隐藏状态及元数据，不是全部专家参数。</text></svg>"
+          },
+          {
+            "title": "Dispatch、Combine 与 Backward 的四次通信",
+            "type": "text",
+            "body": "Forward Dispatch：按dst_rank统计send_counts，prefix-sum后Permute/Pack隐藏状态[A_local,H]，执行变长A2A，目标Rank再按local_expert分段。Forward Combine：Expert输出按origin_rank打包回传，Origin Rank用逆映射Unpermute并按Top-k权重scatter_add。Backward先把dY按Top-k拆分并A2A到Expert Owner，做Expert Backward，再把dX_assignment通过第二次A2A返回Origin；因此训练每个MoE层通常有4次大Payload交换，Expert参数若还有DP副本则另有梯度同步。"
+          },
+          {
+            "title": "MoE Chunk Pipeline 时间线",
+            "type": "svg",
+            "body": "<svg viewBox=\"0 0 680 430\" width=\"100%\" role=\"img\" xmlns=\"http://www.w3.org/2000/svg\"><title>MoE 两次 All-to-All 的 Chunk Pipeline</title><desc>展示两个 token chunk 在通信流、计算流和重排流上通过事件依赖实现 dispatch、grouped GEMM 和 combine 的流水线重叠。</desc><defs><marker id=\"arrow\" viewBox=\"0 0 10 10\" refX=\"8\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M2 1L8 5L2 9\" fill=\"none\" stroke=\"context-stroke\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></marker></defs><text x=\"40\" y=\"28\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"500\" fill=\"#26215C\">Chunked MoE pipeline：依赖在 Chunk 内，重叠发生在 Chunk 间</text><text x=\"40\" y=\"78\" font-family=\"sans-serif\" font-size=\"12\" font-weight=\"500\" fill=\"#5F5E5A\">comm stream</text><text x=\"40\" y=\"150\" font-family=\"sans-serif\" font-size=\"12\" font-weight=\"500\" fill=\"#5F5E5A\">compute stream</text><text x=\"40\" y=\"222\" font-family=\"sans-serif\" font-size=\"12\" font-weight=\"500\" fill=\"#5F5E5A\">permute stream</text><line x1=\"145\" y1=\"58\" x2=\"640\" y2=\"58\" stroke=\"#B4B2A9\" stroke-width=\"0.5\"/><line x1=\"145\" y1=\"130\" x2=\"640\" y2=\"130\" stroke=\"#B4B2A9\" stroke-width=\"0.5\"/><line x1=\"145\" y1=\"202\" x2=\"640\" y2=\"202\" stroke=\"#B4B2A9\" stroke-width=\"0.5\"/><rect x=\"145\" y=\"70\" width=\"105\" height=\"34\" rx=\"7\" fill=\"#CECBF6\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"197\" y=\"91\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#26215C\" text-anchor=\"middle\">Dispatch C0</text><rect x=\"252\" y=\"70\" width=\"105\" height=\"34\" rx=\"7\" fill=\"#AFA9EC\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"304\" y=\"91\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#26215C\" text-anchor=\"middle\">Dispatch C1</text><rect x=\"396\" y=\"70\" width=\"105\" height=\"34\" rx=\"7\" fill=\"#CECBF6\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"448\" y=\"91\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#26215C\" text-anchor=\"middle\">Combine C0</text><rect x=\"503\" y=\"70\" width=\"105\" height=\"34\" rx=\"7\" fill=\"#AFA9EC\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"555\" y=\"91\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#26215C\" text-anchor=\"middle\">Combine C1</text><rect x=\"252\" y=\"142\" width=\"144\" height=\"34\" rx=\"7\" fill=\"#9FE1CB\" stroke=\"#0F6E56\" stroke-width=\"0.5\"/><text x=\"324\" y=\"163\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#04342C\" text-anchor=\"middle\">Grouped GEMM C0</text><rect x=\"396\" y=\"142\" width=\"144\" height=\"34\" rx=\"7\" fill=\"#5DCAA5\" stroke=\"#0F6E56\" stroke-width=\"0.5\"/><text x=\"468\" y=\"163\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#04342C\" text-anchor=\"middle\">Grouped GEMM C1</text><rect x=\"145\" y=\"214\" width=\"80\" height=\"32\" rx=\"7\" fill=\"#B5D4F4\" stroke=\"#185FA5\" stroke-width=\"0.5\"/><text x=\"185\" y=\"234\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#0C447C\" text-anchor=\"middle\">Pack C0</text><rect x=\"225\" y=\"214\" width=\"80\" height=\"32\" rx=\"7\" fill=\"#85B7EB\" stroke=\"#185FA5\" stroke-width=\"0.5\"/><text x=\"265\" y=\"234\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#0C447C\" text-anchor=\"middle\">Pack C1</text><rect x=\"501\" y=\"214\" width=\"90\" height=\"32\" rx=\"7\" fill=\"#B5D4F4\" stroke=\"#185FA5\" stroke-width=\"0.5\"/><text x=\"546\" y=\"234\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#0C447C\" text-anchor=\"middle\">Unpack C0/1</text><path d=\"M197 104 L252 142\" fill=\"none\" stroke=\"#534AB7\" stroke-width=\"1.2\" marker-end=\"url(#arrow)\"/><path d=\"M396 159 L396 104\" fill=\"none\" stroke=\"#0F6E56\" stroke-width=\"1.2\" marker-end=\"url(#arrow)\"/><path d=\"M357 87 L396 142\" fill=\"none\" stroke=\"#534AB7\" stroke-width=\"1.2\" marker-end=\"url(#arrow)\"/><path d=\"M540 159 L503 104\" fill=\"none\" stroke=\"#0F6E56\" stroke-width=\"1.2\" marker-end=\"url(#arrow)\"/><rect x=\"40\" y=\"286\" width=\"600\" height=\"108\" rx=\"14\" fill=\"#F1EFE8\" stroke=\"#5F5E5A\" stroke-width=\"0.5\"/><text x=\"58\" y=\"312\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#2C2C2A\">事件依赖</text><text x=\"58\" y=\"338\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#5F5E5A\">dispatch_done[C] → GEMM C；gemm_done[C] → combine C；不同 C 使用独立 Buffer，避免覆盖。</text><text x=\"58\" y=\"362\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#5F5E5A\">Collective 调用顺序必须在所有 Rank 完全一致；即使某 Chunk 为空，也不能让部分 Rank 跳过。</text><text x=\"58\" y=\"386\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#A32D2D\">时间线上相交不等于免费：NCCL 与 GEMM 可能争用 SM、L2、HBM 和互联注入带宽。</text></svg>"
+          },
+          {
+            "title": "MoE overlap 的执行与观测要点",
+            "type": "code",
+            "body": "for chunk in chunks:\n  pack_done = permute_stream.pack(chunk)\n  dispatch_done = comm_stream.wait(pack_done).all_to_all_async()\n  gemm_done = compute_stream.wait(dispatch_done).grouped_gemm()\n  combine_done = comm_stream.wait(gemm_done).all_to_all_async()\n  permute_stream.wait(combine_done).unpermute_weighted_sum()\n\n必须保证：不同chunk使用独立buffer；所有rank collective顺序完全一致；空chunk不能单边跳过；buffer在异步操作完成前不能复用。观测raw/exposed dispatch-combine、overlap时GEMM/通信膨胀、tokens-per-expert max/mean/P99、per-rank bytes、SM/Tensor Core/HBM/NVLink/IB与pipeline tail。"
           },
           {
             "title": "EP 通信量算例",
@@ -2938,6 +2973,21 @@
       "source": "GPUDirect",
       "target": "H2D",
       "type": "related"
+    },
+    {
+      "source": "Mixture of Experts",
+      "target": "Expert Parallel",
+      "type": "component"
+    },
+    {
+      "source": "Mixture of Experts",
+      "target": "All-to-All",
+      "type": "component"
+    },
+    {
+      "source": "Mixture of Experts",
+      "target": "Compute-Communication Overlap",
+      "type": "enables"
     }
   ],
   "lessons": [
@@ -3228,6 +3278,14 @@
       "depth": "D2",
       "question_summary": "NIC和Storage如何绕过CPU Bounce Buffer直达GPU",
       "answer_summary": "GPUDirect允许NIC、Storage或Peer GPU直接DMA到GPU Memory，降低CPU占用、复制次数和延迟。"
+    },
+    {
+      "id": "L0037",
+      "at": "2026-08-05T16:26:40+08:00",
+      "concept": "Mixture of Experts",
+      "depth": "D2",
+      "question_summary": "深入解释 MoE Grouped GEMM、p_e、Router Z-Loss 与两次 All-to-All 的通信计算重叠。",
+      "answer_summary": "补全了变长 Grouped GEMM 的 Tile Scheduler、p_e 数值计算、Z-Loss 梯度，以及 MoE 前后向 A2A Chunk Pipeline 的依赖、争用和观测方法。"
     }
   ]
 }

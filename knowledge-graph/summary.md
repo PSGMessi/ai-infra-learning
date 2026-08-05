@@ -1,9 +1,9 @@
 # AI Infra 学习摘要
 
-- 更新时间：2026-08-03T11:50:29+08:00
+- 更新时间：2026-08-05T16:26:40+08:00
 - 概念数：35
-- 教学事件数：36
-- 关系边数：120
+- 教学事件数：37
+- 关系边数：123
 
 ## 掌握度总览
 
@@ -167,6 +167,9 @@
 - GPUDirect --related--> CPU-GPU Communication
 - GPUDirect --related--> D2H
 - GPUDirect --related--> H2D
+- Mixture of Experts --component--> Expert Parallel
+- Mixture of Experts --component--> All-to-All
+- Mixture of Experts --enables--> Compute-Communication Overlap
 
 ## 概念详情（每个点包含输出过的信息）
 
@@ -1011,6 +1014,13 @@ B=2,S=3,T=6,H=8,E=4,k=2,F_expert=16,F_dense=32。Router logits [6,4]，Top-k ind
 
 _（此处为内嵌 SVG 图，请在 index.html 中查看）_
 
+**Grouped GEMM 深入：从变长 Token 到 Tile Scheduler**
+Grouped GEMM 先将同一 Expert 的 Token 打包到连续 packed_X[ΣT_e,H]，用 expert_offsets 和每组 A/B/C 指针、M_e/N/K 描述多个独立 GEMM。单个或少量 Persistent Kernel 将所有 Expert 输出切成 Tensor Core tiles；CTA 根据 prefix_tiles 把全局 tile_id 映射到 Expert，再加载该 Expert 的独立权重执行。它减少 launch、提高 tile 并行度并避免 pad-to-capacity 的无效 FLOP，但不能消除 Rank 间负载不均、热门 Expert 长尾和通信/GEMM 的 SM/HBM 争用。
+
+**Grouped GEMM 打包与 Tile 调度图**
+
+_（此处为内嵌 SVG 图，请在 index.html 中查看）_
+
 **Router 与 Top-k**
 Router将X[T,H]投影为logits[T,E]，经softmax或其他评分函数选择Top-k，并对选中权重归一化。输出 y_t=Σ gate·Expert_e(x_t)。具体实现还可能使用sigmoid、group-limited routing、expert bias或aux-loss-free balancing。
 
@@ -1026,9 +1036,41 @@ Router将X[T,H]投影为logits[T,E]，经softmax或其他评分函数选择Top-k
 f_e=Expert e实际assignment比例；p_e=Router对Expert e的平均概率质量。经典辅助损失可写为L_aux=α×E×Σ f_e p_e；另有Router Z-Loss约束logsumexp(logits)。系数过小会塌缩，过大会妨碍专家专门化。
 ```
 
+**p_e 的计算与 f_e 的区别**
+
+```
+常见定义：P_{t,e}=softmax(router_logits_t)[e]，p_e=(1/T)×Σ_t P_{t,e}。例：4 Token 对 E0/E1/E2 的概率分别为[0.7,0.2,0.1]、[0.6,0.3,0.1]、[0.2,0.7,0.1]、[0.1,0.6,0.3]，则p=[0.40,0.45,0.15]。Top-1硬选择为[E0,E0,E1,E1]，f=[0.5,0.5,0]。p是可微的软概率质量，f是离散的实际Assignment比例；Top-2时f的常见分母为T×k。
+```
+
+**Router Z-Loss：尺度、饱和与梯度**
+
+```
+Softmax对共同偏移不敏感：softmax(l+c)=softmax(l)，但Logit差值放大如[2,1,0]→[20,10,0]会使概率接近one-hot，p(1-p)趋近0，Router难以纠错。定义z_t=logsumexp(l_t)，L_z=λ_z×mean_t(z_t²)，梯度∂L_z/∂l_{t,e}=(2λ_z/T)×z_t×softmax(l_t)_e。Z-Loss约束主任务看不见的绝对尺度/共同偏移，并间接抑制极端Logits；它不能替代负载均衡，常与Router FP32、稳定logsumexp、合理初始化和必要的clipping配合。
+```
+
 **Expert Parallel 两次 All-to-All**
 
 _（此处为内嵌 SVG 图，请在 index.html 中查看）_
+
+**Dispatch、Combine 与 Backward 的四次通信**
+Forward Dispatch：按dst_rank统计send_counts，prefix-sum后Permute/Pack隐藏状态[A_local,H]，执行变长A2A，目标Rank再按local_expert分段。Forward Combine：Expert输出按origin_rank打包回传，Origin Rank用逆映射Unpermute并按Top-k权重scatter_add。Backward先把dY按Top-k拆分并A2A到Expert Owner，做Expert Backward，再把dX_assignment通过第二次A2A返回Origin；因此训练每个MoE层通常有4次大Payload交换，Expert参数若还有DP副本则另有梯度同步。
+
+**MoE Chunk Pipeline 时间线**
+
+_（此处为内嵌 SVG 图，请在 index.html 中查看）_
+
+**MoE overlap 的执行与观测要点**
+
+```
+for chunk in chunks:
+  pack_done = permute_stream.pack(chunk)
+  dispatch_done = comm_stream.wait(pack_done).all_to_all_async()
+  gemm_done = compute_stream.wait(dispatch_done).grouped_gemm()
+  combine_done = comm_stream.wait(gemm_done).all_to_all_async()
+  permute_stream.wait(combine_done).unpermute_weighted_sum()
+
+必须保证：不同chunk使用独立buffer；所有rank collective顺序完全一致；空chunk不能单边跳过；buffer在异步操作完成前不能复用。观测raw/exposed dispatch-combine、overlap时GEMM/通信膨胀、tokens-per-expert max/mean/P99、per-rank bytes、SM/Tensor Core/HBM/NVLink/IB与pipeline tail。
+```
 
 **EP 通信量算例**
 
@@ -1062,7 +1104,7 @@ for expert_id, expert in enumerate(experts):
 
 **关键总结**
 MoE通过条件激活扩大参数容量，但把Dense模型的规则GEMM问题转化为动态路由、负载均衡、Token重排、All-to-All和碎片化GEMM问题。分析时同时看Architecture、Routing、Compute、Communication、Memory和Serving。
-- 关联：enables→Expert Parallel; implements→All-to-All; related→Megatron; related→PyTorch
+- 关联：enables→Expert Parallel; implements→All-to-All; related→Megatron; related→PyTorch; component→Expert Parallel; component→All-to-All; enables→Compute-Communication Overlap
 
 ### Multi-Dimensional Parallelism  (掌握度 L1)
 - 别名：3D Parallelism, 4D Parallelism, 5D Parallelism, 多维并行
@@ -1627,3 +1669,4 @@ VPP = PP 的更细粒度 stage 切分 + interleaved 1F1B。它让每张 GPU 持�
 - [L0034] NUMA (D1) — Host Buffer若位于远端Socket，H2D/D2H会额外跨CPU互联，降低带宽并增加尾延迟。
 - [L0035] Unified Memory (D2) — Unified Memory统一指针和迁移管理，但页面仍可能在CPU/GPU间迁移并产生Page Fault或Thrashing。
 - [L0036] GPUDirect (D2) — GPUDirect允许NIC、Storage或Peer GPU直接DMA到GPU Memory，降低CPU占用、复制次数和延迟。
+- [L0037] Mixture of Experts (D2) — 补全了变长 Grouped GEMM 的 Tile Scheduler、p_e 数值计算、Z-Loss 梯度，以及 MoE 前后向 A2A Chunk Pipeline 的依赖、争用和观测方法。
