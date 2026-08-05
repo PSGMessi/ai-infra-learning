@@ -208,6 +208,11 @@ function openDetail(id){
 }
 window.__open=openDetail;
 window.__closeDetail=()=>{ document.getElementById("detail").style.display="none"; };
+window.__openGroup=(group)=>handleClick({isGroup:true,group});
+window.__graphState=()=>{
+  const gd=Graph?Graph.graphData():{nodes:[],links:[]};
+  return {mode,openedGroup,nodes:gd.nodes.map(n=>n.id),links:gd.links.length,ready:!!Graph};
+};
 
 init();
 </script>
