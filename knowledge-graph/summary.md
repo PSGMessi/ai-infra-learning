@@ -1,14 +1,16 @@
 # AI Infra 学习摘要
 
-- 更新时间：2026-08-05T16:26:40+08:00
-- 概念数：35
-- 教学事件数：37
-- 关系边数：123
+- 更新时间：2026-08-07T15:34:12+08:00
+- 概念数：43
+- 教学事件数：45
+- 关系边数：133
 
 ## 掌握度总览
 
 | 概念 | 掌握度 | 需复习 | 下次复习 | 别名 |
 |---|---:|:---:|---|---|
+| Adafactor | L1 | 否 | 2026-08-08 | Factored Second Moment Optimizer |
+| AdamW | L1 | 否 | 2026-08-08 | Adam with Decoupled Weight Decay |
 | All-to-All | L1 | 否 | 2026-07-27 | 全交换, All2All |
 | AllGather | L1 | 否 | 2026-07-27 | 全收集 |
 | AllReduce | L1 | 否 | 2026-07-27 | 全规约 |
@@ -27,19 +29,25 @@
 | FSDP | L1 | 否 | 2026-07-27 | Fully Sharded Data Parallel, 完全分片数据并行, ZeRO-3 |
 | GPUDirect | L1 | 否 | 2026-08-04 | GPUDirect RDMA, GPUDirect Storage |
 | H2D | L1 | 否 | 2026-08-04 | Host-to-Device, CPU到GPU传输 |
+| LAMB | L1 | 否 | 2026-08-08 | Layer-wise Adaptive Moments optimizer for Batch training, LARS |
+| Lion | L1 | 否 | 2026-08-08 | EvoLved Sign Momentum |
 | Low-Bit Quantization | L1 | 否 | 2026-08-03 | 低比特量化, INT8/INT4 Quantization |
 | Megatron | L1 | 否 | 2026-07-28 | Megatron-LM, Megatron Core |
 | Mixed Precision Training | L1 | 否 | 2026-08-03 | 混合精度训练, AMP |
 | Mixture of Experts | L1 | 否 | 2026-07-30 | MoE, Sparse Mixture of Experts, 混合专家 |
 | Multi-Dimensional Parallelism | L1 | 否 | 2026-07-30 | 3D Parallelism, 4D Parallelism, 5D Parallelism, 多维并行 |
+| Muon | L1 | 否 | 2026-08-08 | Momentum Orthogonalized by Newton-Schulz |
 | NCCL | L1 | 否 | 2026-07-28 |  |
 | NUMA | L1 | 否 | 2026-08-04 | Non-Uniform Memory Access |
 | Numerical Precision | L1 | 否 | 2026-08-03 | 数值精度, 大模型精度 |
 | OpenAI Triton | L1 | 否 | 2026-07-28 | Triton, triton-lang |
+| Optimizer | L1 | 否 | 2026-08-08 | 优化器, Training Optimizer, 大模型优化器 |
 | Pinned Memory | L1 | 否 | 2026-08-04 | Page-Locked Memory, 锁页内存 |
 | Pipeline Parallel | L1 | 否 | 2026-07-27 | PP, 流水线并行 |
 | PyTorch | L1 | 否 | 2026-07-28 | torch |
 | ReduceScatter | L1 | 否 | 2026-07-27 | 规约散射 |
+| SGD and Momentum | L1 | 否 | 2026-08-08 | SGD, Momentum SGD, Nesterov |
+| Shampoo | L1 | 否 | 2026-08-08 | Preconditioned Stochastic Tensor Optimization |
 | Tensor Parallel | L1 | 否 | 2026-07-27 | TP, 张量并行 |
 | Unified Memory | L1 | 否 | 2026-08-04 | CUDA Managed Memory, 统一内存 |
 | Virtual Pipeline Parallelism | L1 | 否 | 2026-07-28 | VPP, 虚拟流水线并行, Interleaved Pipeline Parallelism |
@@ -170,8 +178,74 @@
 - Mixture of Experts --component--> Expert Parallel
 - Mixture of Experts --component--> All-to-All
 - Mixture of Experts --enables--> Compute-Communication Overlap
+- Optimizer --implements--> PyTorch
+- Optimizer --related--> FSDP
+- Optimizer --related--> Mixed Precision Training
+- SGD and Momentum --component--> Optimizer
+- AdamW --component--> Optimizer
+- Adafactor --component--> Optimizer
+- LAMB --component--> Optimizer
+- Lion --component--> Optimizer
+- Shampoo --component--> Optimizer
+- Muon --component--> Optimizer
 
 ## 概念详情（每个点包含输出过的信息）
+
+### Adafactor  (掌握度 L1)
+- 别名：Factored Second Moment Optimizer
+
+**一句话结论**
+Adafactor用行列统计近似大矩阵的完整二阶矩，把该状态从O(nm)降至O(n+m)，并配合Update Clipping和Relative Step。
+
+**更新公式**
+
+```
+W[n,m]只存R[n]、C[m]；V_hat[i,j]≈R[i]C[j]/mean(R)；U=G/(√V_hat+ε)。
+```
+
+**状态与显存**
+
+```
+4096×16384矩阵的FP32完整v为256MiB；行列状态约80KiB，未含可选Momentum。
+```
+
+**适用场景**
+优化器状态硬受限、模型以大矩阵为主，并愿意重新调参。
+
+**工程风险**
+因式分解是近似；不同库Relative Step/Scale Parameter默认差异大。
+
+**共同选型原则**
+切换优化器时必须独立调Learning Rate、Weight Decay、Warmup与内部系数；同时报告Validation Loss vs Tokens、Wall-clock、FLOPs、状态显存和稳定性。
+- 关联：component→Optimizer
+
+### AdamW  (掌握度 L1)
+- 别名：Adam with Decoupled Weight Decay
+
+**一句话结论**
+AdamW维护一阶矩m和二阶矩v做逐坐标自适应，并把Weight Decay从梯度预条件中解耦，是Transformer/LLM默认基线。
+
+**更新公式**
+
+```
+m←β1m+(1−β1)g；v←β2v+(1−β2)g²；偏差修正后θ←(1−ηλ)θ−ηm_hat/(√v_hat+ε)。
+```
+
+**状态与显存**
+
+```
+FP32 m/v约8 Byte/参数；含FP32 Master时再加4 Byte/参数。
+```
+
+**适用场景**
+新Transformer/LLM预训练和全参数微调的首选基线。
+
+**工程风险**
+状态和HBM流量大；β2、ε、LR、WD与Schedule相互耦合。
+
+**共同选型原则**
+切换优化器时必须独立调Learning Rate、Weight Decay、Warmup与内部系数；同时报告Validation Loss vs Tokens、Wall-clock、FLOPs、状态显存和稳定性。
+- 关联：component→Optimizer
 
 ### All-to-All  (掌握度 L1)
 - 别名：全交换, All2All
@@ -917,6 +991,62 @@ for x in loader:
 Pinned源在DMA完成前不能被CPU修改或复用；Pageable路径可能经过内部Staging。
 - 关联：related→CPU-GPU Communication; related→Pinned Memory; related→CUDA Streams
 
+### LAMB  (掌握度 L1)
+- 别名：Layer-wise Adaptive Moments optimizer for Batch training, LARS
+
+**一句话结论**
+LAMB在Adam逐参数自适应方向外增加Layer-wise Trust Ratio，控制极大Batch下每层更新相对参数范数。LARS是对应的SGD系思路。
+
+**更新公式**
+
+```
+r_l=m_hat/(√v_hat+ε)+λθ_l；trust_l=||θ_l||/(||r_l||+ε)；θ_l←θ_l−η trust_l r_l。
+```
+
+**状态与显存**
+
+```
+与Adam类相近，主要m/v约8 Byte/参数，另有临时Layer Norm统计。
+```
+
+**适用场景**
+极大Global Batch的BERT/Transformer且已有验证Recipe；LARS更常见于大Batch视觉。
+
+**工程风险**
+普通Batch收益不确定；Layer规则、Norm/Bias排除和LR Scaling需专门调试。
+
+**共同选型原则**
+切换优化器时必须独立调Learning Rate、Weight Decay、Warmup与内部系数；同时报告Validation Loss vs Tokens、Wall-clock、FLOPs、状态显存和稳定性。
+- 关联：component→Optimizer
+
+### Lion  (掌握度 L1)
+- 别名：EvoLved Sign Momentum
+
+**一句话结论**
+Lion只保存一阶Momentum，更新使用Momentum组合的sign，牺牲连续逐坐标幅度换取更低状态显存和简单更新。
+
+**更新公式**
+
+```
+c=β1m+(1−β1)g；θ←θ−η(sign(c)+λθ)；m←β2m+(1−β2)g。
+```
+
+**状态与显存**
+
+```
+FP32 Momentum约4 Byte/参数，约为AdamW两份Moment的一半。
+```
+
+**适用场景**
+状态显存重要、能为Lion独立搜索LR/WD/Beta并有目标模型验证。
+
+**工程风险**
+LR直接控制坐标步长；丢弃幅度信息，AdamW超参数不可照搬。
+
+**共同选型原则**
+切换优化器时必须独立调Learning Rate、Weight Decay、Warmup与内部系数；同时报告Validation Loss vs Tokens、Wall-clock、FLOPs、状态显存和稳定性。
+- 关联：component→Optimizer
+
 ### Low-Bit Quantization  (掌握度 L1)
 - 别名：低比特量化, INT8/INT4 Quantization
 
@@ -1174,6 +1304,34 @@ EP把MoE Experts分到不同Rank；Router后Token通过Dispatch All-to-All到Exp
 ```
 - 关联：component→DDP; component→FSDP; component→Tensor Parallel; component→Pipeline Parallel; component→Virtual Pipeline Parallelism; component→Context Parallelism; component→Expert Parallel
 
+### Muon  (掌握度 L1)
+- 别名：Momentum Orthogonalized by Newton-Schulz
+
+**一句话结论**
+Muon对二维权重的梯度Momentum做近似正交化，按矩阵结构调整奇异方向；通常与AdamW组成Hybrid Optimizer。
+
+**更新公式**
+
+```
+M_t=μM_{t−1}+G_t；O_t=NewtonSchulz(M_t)近似正交化；W_t=W_{t−1}−η_tO_t。
+```
+
+**状态与显存**
+
+```
+二维矩阵通常一份Momentum约4 Byte/参数；Embedding/Norm等AdamW部分另算。
+```
+
+**适用场景**
+有研究工程预算、追求样本效率、可严格对照AdamW的大规模预训练。
+
+**工程风险**
+额外矩阵计算；FSDP/ZeRO下完整矩阵语义和通信复杂；生态成熟度较低。
+
+**共同选型原则**
+切换优化器时必须独立调Learning Rate、Weight Decay、Warmup与内部系数；同时报告Validation Loss vs Tokens、Wall-clock、FLOPs、状态显存和稳定性。
+- 关联：component→Optimizer
+
 ### NCCL  (掌握度 L1)
 - （本节点暂无详细内容，仅有摘要）
 
@@ -1279,6 +1437,61 @@ Triton 是 CUDA 之上的 kernel 语言/编译器，生成的 kernel 最终仍�
 **常见误区**
 不要与 NVIDIA Triton Inference Server(推理服务器) 混淆，二者只是重名。Triton 也不取代 CUDA。
 - 关联：implements→CUDA; related→PyTorch; component→torch.compile
+
+### Optimizer  (掌握度 L1)
+- 别名：优化器, Training Optimizer, 大模型优化器
+
+**一句话结论**
+优化器不负责计算梯度，而是把反向传播得到的瞬时梯度变成稳定、尺度合适、带历史信息和正则化约束的参数更新。AdamW 是 Transformer/LLM 最稳妥的默认基线；状态显存、样本效率、每步成本和分布式实现必须一起评估。
+
+**训练 Step 中的位置**
+
+_（此处为内嵌 SVG 图，请在 index.html 中查看）_
+
+**统一状态机**
+
+```
+g_t=∇L_t(θ_t)；s_t=update_state(s_{t−1},g_t)；u_t=transform(g_t,s_t,θ_t)；θ_{t+1}=θ_t−η_tu_t。Backward 产生梯度，Optimizer 变换梯度，LR Scheduler 决定全局步长。
+```
+
+**SGD、Momentum 与 Adam**
+
+```
+SGD: θ←θ−ηg。Momentum: v←μv+g, θ←θ−ηv。Adam: m←β1m+(1−β1)g；v←β2v+(1−β2)g²；偏差修正后用m_hat/(√v_hat+ε)更新。Adam用一阶方向与逐坐标二阶尺度处理噪声和参数尺度差异。
+```
+
+**AdamW 与解耦权重衰减**
+
+```
+Adam中把λθ加进梯度会让正则项也经过1/√v预条件。AdamW执行θ_{t+1}=(1−η_tλ)θ_t−η_tm_hat/(√v_hat+ε)，使Weight Decay不经过自适应预条件。Bias和Norm Scale通常不衰减，但这是Recipe而非数学定律。
+```
+
+**状态显存量级**
+
+```
+BF16参数2B + BF16梯度2B + FP32 Master4B + FP32 Adam m/v各4B = 16 Byte/参数。7B模型静态状态约112GB十进制=104.3GiB；仅m/v约52.2GiB。8个Ranks理想全分片约13.0GiB/Rank，未含Activation与临时Buffer。
+```
+
+**优化器更新几何分类**
+
+_（此处为内嵌 SVG 图，请在 index.html 中查看）_
+
+**系统实现边界**
+8-bit AdamW是量化状态实现；Fused/Foreach AdamW是Kernel融合；ZeRO/FSDP是状态、梯度和参数分片。它们主要改变显存、HBM流量和通信，不是新的基础优化公式。
+
+**最小 PyTorch 结构**
+
+```
+decay,no_decay=[],[]
+for name,p in model.named_parameters():
+    (decay if p.ndim>=2 else no_decay).append(p)
+opt=torch.optim.AdamW([{'params':decay,'weight_decay':0.1},{'params':no_decay,'weight_decay':0.0}],lr=3e-4,betas=(0.9,0.95))
+loss.backward(); clip_grad_norm_(model.parameters(),1.0); opt.step(); opt.zero_grad(set_to_none=True)
+```
+
+**选型原则与误区**
+新LLM先建立可信AdamW基线。OOM先评估状态分片，再考虑8-bit AdamW；之后才是Adafactor/Lion等算法变化。极大Batch评估LAMB/LARS；研究样本效率再评估Shampoo/Muon。不能直接复用AdamW学习率，也不能只看训练Loss或Step数。
+- 关联：implements→PyTorch; related→FSDP; related→Mixed Precision Training
 
 ### Pinned Memory  (掌握度 L1)
 - 别名：Page-Locked Memory, 锁页内存
@@ -1397,6 +1610,62 @@ _（此处为内嵌 SVG 图，请在 index.html 中查看）_
 **常见误区**
 误以为 ReduceScatter 比 AllReduce 通信更贵：单次约 M，是 AllReduce(2M) 的一半；FSDP 通信总量多是因为多了前向那次 AllGather，而非 ReduceScatter 本身贵。
 - 关联：component→Distributed Training Communication; enables→FSDP; related→AllReduce
+
+### SGD and Momentum  (掌握度 L1)
+- 别名：SGD, Momentum SGD, Nesterov
+
+**一句话结论**
+SGD直接沿梯度下降；Momentum用一阶历史平滑噪声并累积长期一致方向。状态最省，但缺少逐参数自适应。
+
+**更新公式**
+
+```
+SGD: θ_{t+1}=θ_t−η_tg_t。Momentum: v_t=μv_{t−1}+g_t；θ_{t+1}=θ_t−η_tv_t。不同框架可能在g前乘1−μ。
+```
+
+**状态与显存**
+
+```
+SGD无额外状态；Momentum若FP32保存v，约4 Byte/参数。
+```
+
+**适用场景**
+成熟视觉Recipe、低状态显存、需要透明基线；从零LLM通常不作为默认。
+
+**工程风险**
+对学习率、曲率和参数尺度敏感；Mini-batch噪声更直接进入更新。
+
+**共同选型原则**
+切换优化器时必须独立调Learning Rate、Weight Decay、Warmup与内部系数；同时报告Validation Loss vs Tokens、Wall-clock、FLOPs、状态显存和稳定性。
+- 关联：component→Optimizer
+
+### Shampoo  (掌握度 L1)
+- 别名：Preconditioned Stochastic Tensor Optimization
+
+**一句话结论**
+Shampoo为Tensor每个维度维护矩阵Preconditioner，用矩阵逆根捕获参数行列相关性，比Adam的对角预条件更丰富。
+
+**更新公式**
+
+```
+对G[n,m]：L←L+GG^T，R←R+G^TG；G_pre=L^(−1/4)GR^(−1/4)。
+```
+
+**状态与显存**
+
+```
+二维状态约O(n²+m²)，常用Block Partition、低频逆根更新控制成本。
+```
+
+**适用场景**
+愿意以单步额外计算和工程复杂度换更少训练Steps/更高样本效率。
+
+**工程风险**
+逆矩阵根、状态、Checkpoint和分布式Preconditioner复杂，墙钟收益不保证。
+
+**共同选型原则**
+切换优化器时必须独立调Learning Rate、Weight Decay、Warmup与内部系数；同时报告Validation Loss vs Tokens、Wall-clock、FLOPs、状态显存和稳定性。
+- 关联：component→Optimizer
 
 ### Tensor Parallel  (掌握度 L1)
 - 别名：TP, 张量并行
@@ -1670,3 +1939,11 @@ VPP = PP 的更细粒度 stage 切分 + interleaved 1F1B。它让每张 GPU 持�
 - [L0035] Unified Memory (D2) — Unified Memory统一指针和迁移管理，但页面仍可能在CPU/GPU间迁移并产生Page Fault或Thrashing。
 - [L0036] GPUDirect (D2) — GPUDirect允许NIC、Storage或Peer GPU直接DMA到GPU Memory，降低CPU占用、复制次数和延迟。
 - [L0037] Mixture of Experts (D2) — 补全了变长 Grouped GEMM 的 Tile Scheduler、p_e 数值计算、Z-Loss 梯度，以及 MoE 前后向 A2A Chunk Pipeline 的依赖、争用和观测方法。
+- [L0038] Optimizer (D2) — 系统讲解从SGD/AdamW到Adafactor、LAMB、Lion、Shampoo、Muon的更新几何、状态显存、分布式实现与选型。
+- [L0039] SGD and Momentum (D2) — SGD直接沿梯度下降；Momentum用一阶历史平滑噪声并累积长期一致方向。状态最省，但缺少逐参数自适应。
+- [L0040] AdamW (D2) — AdamW维护一阶矩m和二阶矩v做逐坐标自适应，并把Weight Decay从梯度预条件中解耦，是Transformer/LLM默认基线。
+- [L0041] Adafactor (D2) — Adafactor用行列统计近似大矩阵的完整二阶矩，把该状态从O(nm)降至O(n+m)，并配合Update Clipping和Relative Step。
+- [L0042] LAMB (D2) — LAMB在Adam逐参数自适应方向外增加Layer-wise Trust Ratio，控制极大Batch下每层更新相对参数范数。LARS是对应的SGD系思路。
+- [L0043] Lion (D2) — Lion只保存一阶Momentum，更新使用Momentum组合的sign，牺牲连续逐坐标幅度换取更低状态显存和简单更新。
+- [L0044] Shampoo (D2) — Shampoo为Tensor每个维度维护矩阵Preconditioner，用矩阵逆根捕获参数行列相关性，比Adam的对角预条件更丰富。
+- [L0045] Muon (D2) — Muon对二维权重的梯度Momentum做近似正交化，按矩阵结构调整奇异方向；通常与AdamW组成Hybrid Optimizer。

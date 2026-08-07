@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-07-26T15:54:01+08:00",
-  "updated_at": "2026-08-05T16:26:40+08:00",
+  "updated_at": "2026-08-07T15:34:12+08:00",
   "nodes": {
     "Compute-Communication Overlap": {
       "concept": "Compute-Communication Overlap",
@@ -2371,6 +2371,567 @@
         ]
       },
       "group": "communication"
+    },
+    "Optimizer": {
+      "concept": "Optimizer",
+      "aliases": [
+        "优化器",
+        "Training Optimizer",
+        "大模型优化器"
+      ],
+      "mastery": 1,
+      "needs_review": false,
+      "first_seen": "2026-08-07",
+      "last_seen": "2026-08-07",
+      "next_review": "2026-08-08",
+      "evidence": [],
+      "recommendations": [
+        {
+          "target": "Learning-Rate Schedule",
+          "kind": "prerequisite",
+          "reason": "优化器方向必须与全局步长和Warmup协同",
+          "status": "open"
+        },
+        {
+          "target": "AdamW vs Muon",
+          "kind": "peer",
+          "reason": "对比逐元素预条件与矩阵正交化",
+          "status": "open"
+        },
+        {
+          "target": "FSDP",
+          "kind": "downstream",
+          "reason": "优化器状态在多GPU上的分片与通信",
+          "status": "open"
+        }
+      ],
+      "content": {
+        "sections": [
+          {
+            "title": "一句话结论",
+            "type": "text",
+            "body": "优化器不负责计算梯度，而是把反向传播得到的瞬时梯度变成稳定、尺度合适、带历史信息和正则化约束的参数更新。AdamW 是 Transformer/LLM 最稳妥的默认基线；状态显存、样本效率、每步成本和分布式实现必须一起评估。"
+          },
+          {
+            "title": "训练 Step 中的位置",
+            "type": "svg",
+            "body": "<svg viewBox=\"0 0 680 420\" width=\"100%\" role=\"img\" xmlns=\"http://www.w3.org/2000/svg\"><title>优化器在大模型训练 Step 中的位置</title><desc>展示前向、反向、梯度处理、优化器状态更新、参数更新和分布式同步之间的数据流。</desc><defs><marker id=\"arrow\" viewBox=\"0 0 10 10\" refX=\"8\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M2 1L8 5L2 9\" fill=\"none\" stroke=\"context-stroke\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></marker></defs><text x=\"40\" y=\"28\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"500\" fill=\"#26215C\">一个训练 Step：优化器位于梯度产生之后、参数生效之前</text><rect x=\"40\" y=\"58\" width=\"124\" height=\"58\" rx=\"10\" fill=\"#E6F1FB\" stroke=\"#185FA5\" stroke-width=\"0.5\"/><text x=\"102\" y=\"80\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#0C447C\" text-anchor=\"middle\">Forward</text><text x=\"102\" y=\"100\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#185FA5\" text-anchor=\"middle\">θ_t → Loss</text><rect x=\"202\" y=\"58\" width=\"124\" height=\"58\" rx=\"10\" fill=\"#E6F1FB\" stroke=\"#185FA5\" stroke-width=\"0.5\"/><text x=\"264\" y=\"80\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#0C447C\" text-anchor=\"middle\">Backward</text><text x=\"264\" y=\"100\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#185FA5\" text-anchor=\"middle\">g_t = ∇L</text><rect x=\"364\" y=\"58\" width=\"124\" height=\"58\" rx=\"10\" fill=\"#EEEDFE\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"426\" y=\"80\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#26215C\" text-anchor=\"middle\">Gradient prep</text><text x=\"426\" y=\"100\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#534AB7\" text-anchor=\"middle\">unscale / clip</text><rect x=\"526\" y=\"58\" width=\"114\" height=\"58\" rx=\"10\" fill=\"#EEEDFE\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"583\" y=\"80\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#26215C\" text-anchor=\"middle\">Sync</text><text x=\"583\" y=\"100\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#534AB7\" text-anchor=\"middle\">all-reduce/shard</text><path d=\"M164 87 L198 87\" fill=\"none\" stroke=\"#5F5E5A\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><path d=\"M326 87 L360 87\" fill=\"none\" stroke=\"#5F5E5A\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><path d=\"M488 87 L522 87\" fill=\"none\" stroke=\"#5F5E5A\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><rect x=\"90\" y=\"174\" width=\"500\" height=\"112\" rx=\"16\" fill=\"#E1F5EE\" stroke=\"#0F6E56\" stroke-width=\"0.5\"/><text x=\"112\" y=\"202\" font-family=\"sans-serif\" font-size=\"14\" font-weight=\"500\" fill=\"#04342C\">Optimizer step</text><text x=\"112\" y=\"228\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#0F6E56\">1. 读取梯度 g_t 与历史状态 s_{t−1}</text><text x=\"112\" y=\"250\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#0F6E56\">2. 平滑 / 自适应缩放 / 矩阵预条件，得到 u_t</text><text x=\"112\" y=\"272\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#0F6E56\">3. 施加 decoupled weight decay，按 η_t 更新参数</text><path d=\"M583 116 C583 146 548 154 530 170\" fill=\"none\" stroke=\"#0F6E56\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><rect x=\"202\" y=\"334\" width=\"276\" height=\"54\" rx=\"10\" fill=\"#E6F1FB\" stroke=\"#185FA5\" stroke-width=\"0.5\"/><text x=\"340\" y=\"355\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#0C447C\" text-anchor=\"middle\">θ_{t+1} 写回模型</text><text x=\"340\" y=\"375\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#185FA5\" text-anchor=\"middle\">下一 Step 使用新参数；grad 清零</text><path d=\"M340 286 L340 330\" fill=\"none\" stroke=\"#185FA5\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/></svg>"
+          },
+          {
+            "title": "统一状态机",
+            "type": "formula",
+            "body": "g_t=∇L_t(θ_t)；s_t=update_state(s_{t−1},g_t)；u_t=transform(g_t,s_t,θ_t)；θ_{t+1}=θ_t−η_tu_t。Backward 产生梯度，Optimizer 变换梯度，LR Scheduler 决定全局步长。"
+          },
+          {
+            "title": "SGD、Momentum 与 Adam",
+            "type": "formula",
+            "body": "SGD: θ←θ−ηg。Momentum: v←μv+g, θ←θ−ηv。Adam: m←β1m+(1−β1)g；v←β2v+(1−β2)g²；偏差修正后用m_hat/(√v_hat+ε)更新。Adam用一阶方向与逐坐标二阶尺度处理噪声和参数尺度差异。"
+          },
+          {
+            "title": "AdamW 与解耦权重衰减",
+            "type": "formula",
+            "body": "Adam中把λθ加进梯度会让正则项也经过1/√v预条件。AdamW执行θ_{t+1}=(1−η_tλ)θ_t−η_tm_hat/(√v_hat+ε)，使Weight Decay不经过自适应预条件。Bias和Norm Scale通常不衰减，但这是Recipe而非数学定律。"
+          },
+          {
+            "title": "状态显存量级",
+            "type": "formula",
+            "body": "BF16参数2B + BF16梯度2B + FP32 Master4B + FP32 Adam m/v各4B = 16 Byte/参数。7B模型静态状态约112GB十进制=104.3GiB；仅m/v约52.2GiB。8个Ranks理想全分片约13.0GiB/Rank，未含Activation与临时Buffer。"
+          },
+          {
+            "title": "优化器更新几何分类",
+            "type": "svg",
+            "body": "<svg viewBox=\"0 0 680 500\" width=\"100%\" role=\"img\" xmlns=\"http://www.w3.org/2000/svg\"><title>主流优化器按更新几何和状态成本分类</title><desc>将SGD、AdamW、Adafactor、LAMB、Lion、Shampoo和Muon按是否使用历史、一阶或二阶状态、逐元素或矩阵级预条件进行分类。</desc><defs><marker id=\"arrow\" viewBox=\"0 0 10 10\" refX=\"8\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M2 1L8 5L2 9\" fill=\"none\" stroke=\"context-stroke\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></marker></defs><text x=\"40\" y=\"28\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"500\" fill=\"#26215C\">优化器差异的三条轴：历史状态、缩放粒度、结构信息</text><rect x=\"40\" y=\"56\" width=\"600\" height=\"62\" rx=\"14\" fill=\"#F1EFE8\" stroke=\"#5F5E5A\" stroke-width=\"0.5\"/><text x=\"340\" y=\"80\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#2C2C2A\" text-anchor=\"middle\">输入都来自同一个 g_t；最终都产生参数更新 θ_{t+1}</text><text x=\"340\" y=\"101\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#5F5E5A\" text-anchor=\"middle\">差别在于如何过滤噪声、归一化尺度，以及是否利用 Layer/Matrix 结构</text><rect x=\"40\" y=\"154\" width=\"184\" height=\"118\" rx=\"12\" fill=\"#E6F1FB\" stroke=\"#185FA5\" stroke-width=\"0.5\"/><text x=\"58\" y=\"178\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#0C447C\">梯度与一阶历史</text><text x=\"58\" y=\"202\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#185FA5\">SGD：raw gradient</text><text x=\"58\" y=\"224\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#185FA5\">Momentum：EMA direction</text><text x=\"58\" y=\"246\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#185FA5\">Lion：sign(momentum)</text><rect x=\"248\" y=\"154\" width=\"184\" height=\"118\" rx=\"12\" fill=\"#EEEDFE\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"266\" y=\"178\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#26215C\">逐元素自适应</text><text x=\"266\" y=\"202\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#534AB7\">AdaGrad / RMSProp</text><text x=\"266\" y=\"224\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#534AB7\">AdamW：m / √v</text><text x=\"266\" y=\"246\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#534AB7\">Adafactor：factored v</text><rect x=\"456\" y=\"154\" width=\"184\" height=\"118\" rx=\"12\" fill=\"#E1F5EE\" stroke=\"#0F6E56\" stroke-width=\"0.5\"/><text x=\"474\" y=\"178\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#04342C\">Layer / Matrix 结构</text><text x=\"474\" y=\"202\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#0F6E56\">LARS/LAMB：trust ratio</text><text x=\"474\" y=\"224\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#0F6E56\">Shampoo：matrix roots</text><text x=\"474\" y=\"246\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#0F6E56\">Muon：orthogonalization</text><rect x=\"40\" y=\"316\" width=\"600\" height=\"140\" rx=\"14\" fill=\"#F1EFE8\" stroke=\"#5F5E5A\" stroke-width=\"0.5\"/><text x=\"58\" y=\"342\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#2C2C2A\">选型不是只看收敛曲线</text><text x=\"58\" y=\"370\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#5F5E5A\">算法轴：样本效率、稳定性、超参数敏感度、正则化行为</text><text x=\"58\" y=\"396\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#5F5E5A\">系统轴：状态显存、HBM 流量、额外 FLOP、通信、Checkpoint 体积</text><text x=\"58\" y=\"422\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#5F5E5A\">运营轴：实现成熟度、失败恢复、可观测性、Recipe 可迁移性</text><text x=\"58\" y=\"448\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#A32D2D\">公平比较必须分别调 LR / WD / Warmup / Betas，不能照搬 AdamW 参数。</text></svg>"
+          },
+          {
+            "title": "系统实现边界",
+            "type": "text",
+            "body": "8-bit AdamW是量化状态实现；Fused/Foreach AdamW是Kernel融合；ZeRO/FSDP是状态、梯度和参数分片。它们主要改变显存、HBM流量和通信，不是新的基础优化公式。"
+          },
+          {
+            "title": "最小 PyTorch 结构",
+            "type": "code",
+            "body": "decay,no_decay=[],[]\nfor name,p in model.named_parameters():\n    (decay if p.ndim>=2 else no_decay).append(p)\nopt=torch.optim.AdamW([{'params':decay,'weight_decay':0.1},{'params':no_decay,'weight_decay':0.0}],lr=3e-4,betas=(0.9,0.95))\nloss.backward(); clip_grad_norm_(model.parameters(),1.0); opt.step(); opt.zero_grad(set_to_none=True)"
+          },
+          {
+            "title": "选型原则与误区",
+            "type": "text",
+            "body": "新LLM先建立可信AdamW基线。OOM先评估状态分片，再考虑8-bit AdamW；之后才是Adafactor/Lion等算法变化。极大Batch评估LAMB/LARS；研究样本效率再评估Shampoo/Muon。不能直接复用AdamW学习率，也不能只看训练Loss或Step数。"
+          }
+        ]
+      },
+      "group": "core"
+    },
+    "SGD and Momentum": {
+      "concept": "SGD and Momentum",
+      "aliases": [
+        "SGD",
+        "Momentum SGD",
+        "Nesterov"
+      ],
+      "mastery": 1,
+      "needs_review": false,
+      "first_seen": "2026-08-07",
+      "last_seen": "2026-08-07",
+      "next_review": "2026-08-08",
+      "evidence": [],
+      "recommendations": [
+        {
+          "target": "Optimizer",
+          "kind": "prerequisite",
+          "reason": "理解统一优化器状态机和比较维度",
+          "status": "open"
+        },
+        {
+          "target": "AdamW",
+          "kind": "peer",
+          "reason": "与LLM默认基线比较更新几何和状态成本",
+          "status": "open"
+        },
+        {
+          "target": "FSDP",
+          "kind": "downstream",
+          "reason": "在多GPU上分片优化器状态",
+          "status": "open"
+        }
+      ],
+      "content": {
+        "sections": [
+          {
+            "title": "一句话结论",
+            "type": "text",
+            "body": "SGD直接沿梯度下降；Momentum用一阶历史平滑噪声并累积长期一致方向。状态最省，但缺少逐参数自适应。"
+          },
+          {
+            "title": "更新公式",
+            "type": "formula",
+            "body": "SGD: θ_{t+1}=θ_t−η_tg_t。Momentum: v_t=μv_{t−1}+g_t；θ_{t+1}=θ_t−η_tv_t。不同框架可能在g前乘1−μ。"
+          },
+          {
+            "title": "状态与显存",
+            "type": "formula",
+            "body": "SGD无额外状态；Momentum若FP32保存v，约4 Byte/参数。"
+          },
+          {
+            "title": "适用场景",
+            "type": "text",
+            "body": "成熟视觉Recipe、低状态显存、需要透明基线；从零LLM通常不作为默认。"
+          },
+          {
+            "title": "工程风险",
+            "type": "text",
+            "body": "对学习率、曲率和参数尺度敏感；Mini-batch噪声更直接进入更新。"
+          },
+          {
+            "title": "共同选型原则",
+            "type": "text",
+            "body": "切换优化器时必须独立调Learning Rate、Weight Decay、Warmup与内部系数；同时报告Validation Loss vs Tokens、Wall-clock、FLOPs、状态显存和稳定性。"
+          }
+        ]
+      },
+      "group": "core"
+    },
+    "AdamW": {
+      "concept": "AdamW",
+      "aliases": [
+        "Adam with Decoupled Weight Decay"
+      ],
+      "mastery": 1,
+      "needs_review": false,
+      "first_seen": "2026-08-07",
+      "last_seen": "2026-08-07",
+      "next_review": "2026-08-08",
+      "evidence": [],
+      "recommendations": [
+        {
+          "target": "Optimizer",
+          "kind": "prerequisite",
+          "reason": "理解统一优化器状态机和比较维度",
+          "status": "open"
+        },
+        {
+          "target": "AdamW",
+          "kind": "peer",
+          "reason": "与LLM默认基线比较更新几何和状态成本",
+          "status": "open"
+        },
+        {
+          "target": "FSDP",
+          "kind": "downstream",
+          "reason": "在多GPU上分片优化器状态",
+          "status": "open"
+        }
+      ],
+      "content": {
+        "sections": [
+          {
+            "title": "一句话结论",
+            "type": "text",
+            "body": "AdamW维护一阶矩m和二阶矩v做逐坐标自适应，并把Weight Decay从梯度预条件中解耦，是Transformer/LLM默认基线。"
+          },
+          {
+            "title": "更新公式",
+            "type": "formula",
+            "body": "m←β1m+(1−β1)g；v←β2v+(1−β2)g²；偏差修正后θ←(1−ηλ)θ−ηm_hat/(√v_hat+ε)。"
+          },
+          {
+            "title": "状态与显存",
+            "type": "formula",
+            "body": "FP32 m/v约8 Byte/参数；含FP32 Master时再加4 Byte/参数。"
+          },
+          {
+            "title": "适用场景",
+            "type": "text",
+            "body": "新Transformer/LLM预训练和全参数微调的首选基线。"
+          },
+          {
+            "title": "工程风险",
+            "type": "text",
+            "body": "状态和HBM流量大；β2、ε、LR、WD与Schedule相互耦合。"
+          },
+          {
+            "title": "共同选型原则",
+            "type": "text",
+            "body": "切换优化器时必须独立调Learning Rate、Weight Decay、Warmup与内部系数；同时报告Validation Loss vs Tokens、Wall-clock、FLOPs、状态显存和稳定性。"
+          }
+        ]
+      },
+      "group": "core"
+    },
+    "Adafactor": {
+      "concept": "Adafactor",
+      "aliases": [
+        "Factored Second Moment Optimizer"
+      ],
+      "mastery": 1,
+      "needs_review": false,
+      "first_seen": "2026-08-07",
+      "last_seen": "2026-08-07",
+      "next_review": "2026-08-08",
+      "evidence": [],
+      "recommendations": [
+        {
+          "target": "Optimizer",
+          "kind": "prerequisite",
+          "reason": "理解统一优化器状态机和比较维度",
+          "status": "open"
+        },
+        {
+          "target": "AdamW",
+          "kind": "peer",
+          "reason": "与LLM默认基线比较更新几何和状态成本",
+          "status": "open"
+        },
+        {
+          "target": "FSDP",
+          "kind": "downstream",
+          "reason": "在多GPU上分片优化器状态",
+          "status": "open"
+        }
+      ],
+      "content": {
+        "sections": [
+          {
+            "title": "一句话结论",
+            "type": "text",
+            "body": "Adafactor用行列统计近似大矩阵的完整二阶矩，把该状态从O(nm)降至O(n+m)，并配合Update Clipping和Relative Step。"
+          },
+          {
+            "title": "更新公式",
+            "type": "formula",
+            "body": "W[n,m]只存R[n]、C[m]；V_hat[i,j]≈R[i]C[j]/mean(R)；U=G/(√V_hat+ε)。"
+          },
+          {
+            "title": "状态与显存",
+            "type": "formula",
+            "body": "4096×16384矩阵的FP32完整v为256MiB；行列状态约80KiB，未含可选Momentum。"
+          },
+          {
+            "title": "适用场景",
+            "type": "text",
+            "body": "优化器状态硬受限、模型以大矩阵为主，并愿意重新调参。"
+          },
+          {
+            "title": "工程风险",
+            "type": "text",
+            "body": "因式分解是近似；不同库Relative Step/Scale Parameter默认差异大。"
+          },
+          {
+            "title": "共同选型原则",
+            "type": "text",
+            "body": "切换优化器时必须独立调Learning Rate、Weight Decay、Warmup与内部系数；同时报告Validation Loss vs Tokens、Wall-clock、FLOPs、状态显存和稳定性。"
+          }
+        ]
+      },
+      "group": "core"
+    },
+    "LAMB": {
+      "concept": "LAMB",
+      "aliases": [
+        "Layer-wise Adaptive Moments optimizer for Batch training",
+        "LARS"
+      ],
+      "mastery": 1,
+      "needs_review": false,
+      "first_seen": "2026-08-07",
+      "last_seen": "2026-08-07",
+      "next_review": "2026-08-08",
+      "evidence": [],
+      "recommendations": [
+        {
+          "target": "Optimizer",
+          "kind": "prerequisite",
+          "reason": "理解统一优化器状态机和比较维度",
+          "status": "open"
+        },
+        {
+          "target": "AdamW",
+          "kind": "peer",
+          "reason": "与LLM默认基线比较更新几何和状态成本",
+          "status": "open"
+        },
+        {
+          "target": "FSDP",
+          "kind": "downstream",
+          "reason": "在多GPU上分片优化器状态",
+          "status": "open"
+        }
+      ],
+      "content": {
+        "sections": [
+          {
+            "title": "一句话结论",
+            "type": "text",
+            "body": "LAMB在Adam逐参数自适应方向外增加Layer-wise Trust Ratio，控制极大Batch下每层更新相对参数范数。LARS是对应的SGD系思路。"
+          },
+          {
+            "title": "更新公式",
+            "type": "formula",
+            "body": "r_l=m_hat/(√v_hat+ε)+λθ_l；trust_l=||θ_l||/(||r_l||+ε)；θ_l←θ_l−η trust_l r_l。"
+          },
+          {
+            "title": "状态与显存",
+            "type": "formula",
+            "body": "与Adam类相近，主要m/v约8 Byte/参数，另有临时Layer Norm统计。"
+          },
+          {
+            "title": "适用场景",
+            "type": "text",
+            "body": "极大Global Batch的BERT/Transformer且已有验证Recipe；LARS更常见于大Batch视觉。"
+          },
+          {
+            "title": "工程风险",
+            "type": "text",
+            "body": "普通Batch收益不确定；Layer规则、Norm/Bias排除和LR Scaling需专门调试。"
+          },
+          {
+            "title": "共同选型原则",
+            "type": "text",
+            "body": "切换优化器时必须独立调Learning Rate、Weight Decay、Warmup与内部系数；同时报告Validation Loss vs Tokens、Wall-clock、FLOPs、状态显存和稳定性。"
+          }
+        ]
+      },
+      "group": "core"
+    },
+    "Lion": {
+      "concept": "Lion",
+      "aliases": [
+        "EvoLved Sign Momentum"
+      ],
+      "mastery": 1,
+      "needs_review": false,
+      "first_seen": "2026-08-07",
+      "last_seen": "2026-08-07",
+      "next_review": "2026-08-08",
+      "evidence": [],
+      "recommendations": [
+        {
+          "target": "Optimizer",
+          "kind": "prerequisite",
+          "reason": "理解统一优化器状态机和比较维度",
+          "status": "open"
+        },
+        {
+          "target": "AdamW",
+          "kind": "peer",
+          "reason": "与LLM默认基线比较更新几何和状态成本",
+          "status": "open"
+        },
+        {
+          "target": "FSDP",
+          "kind": "downstream",
+          "reason": "在多GPU上分片优化器状态",
+          "status": "open"
+        }
+      ],
+      "content": {
+        "sections": [
+          {
+            "title": "一句话结论",
+            "type": "text",
+            "body": "Lion只保存一阶Momentum，更新使用Momentum组合的sign，牺牲连续逐坐标幅度换取更低状态显存和简单更新。"
+          },
+          {
+            "title": "更新公式",
+            "type": "formula",
+            "body": "c=β1m+(1−β1)g；θ←θ−η(sign(c)+λθ)；m←β2m+(1−β2)g。"
+          },
+          {
+            "title": "状态与显存",
+            "type": "formula",
+            "body": "FP32 Momentum约4 Byte/参数，约为AdamW两份Moment的一半。"
+          },
+          {
+            "title": "适用场景",
+            "type": "text",
+            "body": "状态显存重要、能为Lion独立搜索LR/WD/Beta并有目标模型验证。"
+          },
+          {
+            "title": "工程风险",
+            "type": "text",
+            "body": "LR直接控制坐标步长；丢弃幅度信息，AdamW超参数不可照搬。"
+          },
+          {
+            "title": "共同选型原则",
+            "type": "text",
+            "body": "切换优化器时必须独立调Learning Rate、Weight Decay、Warmup与内部系数；同时报告Validation Loss vs Tokens、Wall-clock、FLOPs、状态显存和稳定性。"
+          }
+        ]
+      },
+      "group": "core"
+    },
+    "Shampoo": {
+      "concept": "Shampoo",
+      "aliases": [
+        "Preconditioned Stochastic Tensor Optimization"
+      ],
+      "mastery": 1,
+      "needs_review": false,
+      "first_seen": "2026-08-07",
+      "last_seen": "2026-08-07",
+      "next_review": "2026-08-08",
+      "evidence": [],
+      "recommendations": [
+        {
+          "target": "Optimizer",
+          "kind": "prerequisite",
+          "reason": "理解统一优化器状态机和比较维度",
+          "status": "open"
+        },
+        {
+          "target": "AdamW",
+          "kind": "peer",
+          "reason": "与LLM默认基线比较更新几何和状态成本",
+          "status": "open"
+        },
+        {
+          "target": "FSDP",
+          "kind": "downstream",
+          "reason": "在多GPU上分片优化器状态",
+          "status": "open"
+        }
+      ],
+      "content": {
+        "sections": [
+          {
+            "title": "一句话结论",
+            "type": "text",
+            "body": "Shampoo为Tensor每个维度维护矩阵Preconditioner，用矩阵逆根捕获参数行列相关性，比Adam的对角预条件更丰富。"
+          },
+          {
+            "title": "更新公式",
+            "type": "formula",
+            "body": "对G[n,m]：L←L+GG^T，R←R+G^TG；G_pre=L^(−1/4)GR^(−1/4)。"
+          },
+          {
+            "title": "状态与显存",
+            "type": "formula",
+            "body": "二维状态约O(n²+m²)，常用Block Partition、低频逆根更新控制成本。"
+          },
+          {
+            "title": "适用场景",
+            "type": "text",
+            "body": "愿意以单步额外计算和工程复杂度换更少训练Steps/更高样本效率。"
+          },
+          {
+            "title": "工程风险",
+            "type": "text",
+            "body": "逆矩阵根、状态、Checkpoint和分布式Preconditioner复杂，墙钟收益不保证。"
+          },
+          {
+            "title": "共同选型原则",
+            "type": "text",
+            "body": "切换优化器时必须独立调Learning Rate、Weight Decay、Warmup与内部系数；同时报告Validation Loss vs Tokens、Wall-clock、FLOPs、状态显存和稳定性。"
+          }
+        ]
+      },
+      "group": "core"
+    },
+    "Muon": {
+      "concept": "Muon",
+      "aliases": [
+        "Momentum Orthogonalized by Newton-Schulz"
+      ],
+      "mastery": 1,
+      "needs_review": false,
+      "first_seen": "2026-08-07",
+      "last_seen": "2026-08-07",
+      "next_review": "2026-08-08",
+      "evidence": [],
+      "recommendations": [
+        {
+          "target": "Optimizer",
+          "kind": "prerequisite",
+          "reason": "理解统一优化器状态机和比较维度",
+          "status": "open"
+        },
+        {
+          "target": "AdamW",
+          "kind": "peer",
+          "reason": "与LLM默认基线比较更新几何和状态成本",
+          "status": "open"
+        },
+        {
+          "target": "FSDP",
+          "kind": "downstream",
+          "reason": "在多GPU上分片优化器状态",
+          "status": "open"
+        }
+      ],
+      "content": {
+        "sections": [
+          {
+            "title": "一句话结论",
+            "type": "text",
+            "body": "Muon对二维权重的梯度Momentum做近似正交化，按矩阵结构调整奇异方向；通常与AdamW组成Hybrid Optimizer。"
+          },
+          {
+            "title": "更新公式",
+            "type": "formula",
+            "body": "M_t=μM_{t−1}+G_t；O_t=NewtonSchulz(M_t)近似正交化；W_t=W_{t−1}−η_tO_t。"
+          },
+          {
+            "title": "状态与显存",
+            "type": "formula",
+            "body": "二维矩阵通常一份Momentum约4 Byte/参数；Embedding/Norm等AdamW部分另算。"
+          },
+          {
+            "title": "适用场景",
+            "type": "text",
+            "body": "有研究工程预算、追求样本效率、可严格对照AdamW的大规模预训练。"
+          },
+          {
+            "title": "工程风险",
+            "type": "text",
+            "body": "额外矩阵计算；FSDP/ZeRO下完整矩阵语义和通信复杂；生态成熟度较低。"
+          },
+          {
+            "title": "共同选型原则",
+            "type": "text",
+            "body": "切换优化器时必须独立调Learning Rate、Weight Decay、Warmup与内部系数；同时报告Validation Loss vs Tokens、Wall-clock、FLOPs、状态显存和稳定性。"
+          }
+        ]
+      },
+      "group": "core"
     }
   },
   "edges": [
@@ -2988,6 +3549,56 @@
       "source": "Mixture of Experts",
       "target": "Compute-Communication Overlap",
       "type": "enables"
+    },
+    {
+      "source": "Optimizer",
+      "target": "PyTorch",
+      "type": "implements"
+    },
+    {
+      "source": "Optimizer",
+      "target": "FSDP",
+      "type": "related"
+    },
+    {
+      "source": "Optimizer",
+      "target": "Mixed Precision Training",
+      "type": "related"
+    },
+    {
+      "source": "SGD and Momentum",
+      "target": "Optimizer",
+      "type": "component"
+    },
+    {
+      "source": "AdamW",
+      "target": "Optimizer",
+      "type": "component"
+    },
+    {
+      "source": "Adafactor",
+      "target": "Optimizer",
+      "type": "component"
+    },
+    {
+      "source": "LAMB",
+      "target": "Optimizer",
+      "type": "component"
+    },
+    {
+      "source": "Lion",
+      "target": "Optimizer",
+      "type": "component"
+    },
+    {
+      "source": "Shampoo",
+      "target": "Optimizer",
+      "type": "component"
+    },
+    {
+      "source": "Muon",
+      "target": "Optimizer",
+      "type": "component"
     }
   ],
   "lessons": [
@@ -3286,6 +3897,70 @@
       "depth": "D2",
       "question_summary": "深入解释 MoE Grouped GEMM、p_e、Router Z-Loss 与两次 All-to-All 的通信计算重叠。",
       "answer_summary": "补全了变长 Grouped GEMM 的 Tile Scheduler、p_e 数值计算、Z-Loss 梯度，以及 MoE 前后向 A2A Chunk Pipeline 的依赖、争用和观测方法。"
+    },
+    {
+      "id": "L0038",
+      "at": "2026-08-07T15:34:12+08:00",
+      "concept": "Optimizer",
+      "depth": "D2",
+      "question_summary": "详细解释训练中优化器的作用、主流算法异同与适用场景。",
+      "answer_summary": "系统讲解从SGD/AdamW到Adafactor、LAMB、Lion、Shampoo、Muon的更新几何、状态显存、分布式实现与选型。"
+    },
+    {
+      "id": "L0039",
+      "at": "2026-08-07T15:34:12+08:00",
+      "concept": "SGD and Momentum",
+      "depth": "D2",
+      "question_summary": "主流训练优化器的机制、状态成本与适用场景。",
+      "answer_summary": "SGD直接沿梯度下降；Momentum用一阶历史平滑噪声并累积长期一致方向。状态最省，但缺少逐参数自适应。"
+    },
+    {
+      "id": "L0040",
+      "at": "2026-08-07T15:34:12+08:00",
+      "concept": "AdamW",
+      "depth": "D2",
+      "question_summary": "主流训练优化器的机制、状态成本与适用场景。",
+      "answer_summary": "AdamW维护一阶矩m和二阶矩v做逐坐标自适应，并把Weight Decay从梯度预条件中解耦，是Transformer/LLM默认基线。"
+    },
+    {
+      "id": "L0041",
+      "at": "2026-08-07T15:34:12+08:00",
+      "concept": "Adafactor",
+      "depth": "D2",
+      "question_summary": "主流训练优化器的机制、状态成本与适用场景。",
+      "answer_summary": "Adafactor用行列统计近似大矩阵的完整二阶矩，把该状态从O(nm)降至O(n+m)，并配合Update Clipping和Relative Step。"
+    },
+    {
+      "id": "L0042",
+      "at": "2026-08-07T15:34:12+08:00",
+      "concept": "LAMB",
+      "depth": "D2",
+      "question_summary": "主流训练优化器的机制、状态成本与适用场景。",
+      "answer_summary": "LAMB在Adam逐参数自适应方向外增加Layer-wise Trust Ratio，控制极大Batch下每层更新相对参数范数。LARS是对应的SGD系思路。"
+    },
+    {
+      "id": "L0043",
+      "at": "2026-08-07T15:34:12+08:00",
+      "concept": "Lion",
+      "depth": "D2",
+      "question_summary": "主流训练优化器的机制、状态成本与适用场景。",
+      "answer_summary": "Lion只保存一阶Momentum，更新使用Momentum组合的sign，牺牲连续逐坐标幅度换取更低状态显存和简单更新。"
+    },
+    {
+      "id": "L0044",
+      "at": "2026-08-07T15:34:12+08:00",
+      "concept": "Shampoo",
+      "depth": "D2",
+      "question_summary": "主流训练优化器的机制、状态成本与适用场景。",
+      "answer_summary": "Shampoo为Tensor每个维度维护矩阵Preconditioner，用矩阵逆根捕获参数行列相关性，比Adam的对角预条件更丰富。"
+    },
+    {
+      "id": "L0045",
+      "at": "2026-08-07T15:34:12+08:00",
+      "concept": "Muon",
+      "depth": "D2",
+      "question_summary": "主流训练优化器的机制、状态成本与适用场景。",
+      "answer_summary": "Muon对二维权重的梯度Momentum做近似正交化，按矩阵结构调整奇异方向；通常与AdamW组成Hybrid Optimizer。"
     }
   ]
 }
