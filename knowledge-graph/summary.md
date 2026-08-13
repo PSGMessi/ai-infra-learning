@@ -1,23 +1,27 @@
 # AI Infra 学习摘要
 
-- 更新时间：2026-08-07T15:34:12+08:00
-- 概念数：43
-- 教学事件数：45
-- 关系边数：133
+- 更新时间：2026-08-13T11:24:58+08:00
+- 概念数：50
+- 教学事件数：52
+- 关系边数：143
 
 ## 掌握度总览
 
 | 概念 | 掌握度 | 需复习 | 下次复习 | 别名 |
 |---|---:|:---:|---|---|
+| Activation Checkpointing | L1 | 否 | 2026-08-14 | Gradient Checkpointing, 激活重计算 |
 | Adafactor | L1 | 否 | 2026-08-08 | Factored Second Moment Optimizer |
 | AdamW | L1 | 否 | 2026-08-08 | Adam with Decoupled Weight Decay |
 | All-to-All | L1 | 否 | 2026-07-27 | 全交换, All2All |
 | AllGather | L1 | 否 | 2026-07-27 | 全收集 |
 | AllReduce | L1 | 否 | 2026-07-27 | 全规约 |
 | BF16 | L1 | 否 | 2026-08-03 | bfloat16, Brain Floating Point 16 |
+| Backpropagation | L1 | 否 | 2026-08-14 | 反向传播, Backward Pass, Backprop |
 | CPU-GPU Communication | L1 | 否 | 2026-08-04 | CPU–GPU通信, Host-Device Data Movement |
 | CUDA | L1 | 否 | 2026-07-28 | Compute Unified Device Architecture, CUDA Programming Model, GPU Memory Hierarchy |
 | CUDA Streams | L1 | 否 | 2026-08-04 | CUDA Stream and Event, CUDA流与事件 |
+| Chain Rule | L1 | 否 | 2026-08-14 | 链式法则 |
+| Computational Graph | L1 | 否 | 2026-08-14 | 计算图, Dynamic Graph |
 | Compute-Communication Overlap | L1 | 否 | 2026-07-27 | 计算通信重叠, overlap, 隐藏延迟 |
 | Context Parallelism | L1 | 否 | 2026-07-30 | CP, 上下文并行 |
 | D2H | L1 | 否 | 2026-08-04 | Device-to-Host, GPU到CPU传输 |
@@ -28,6 +32,7 @@
 | FP8 Training | L1 | 否 | 2026-08-03 | FP8混合精度训练, E4M3/E5M2 Training |
 | FSDP | L1 | 否 | 2026-07-27 | Fully Sharded Data Parallel, 完全分片数据并行, ZeRO-3 |
 | GPUDirect | L1 | 否 | 2026-08-04 | GPUDirect RDMA, GPUDirect Storage |
+| Gradient Accumulation | L1 | 否 | 2026-08-14 | 梯度累加, Micro-batch Accumulation |
 | H2D | L1 | 否 | 2026-08-04 | Host-to-Device, CPU到GPU传输 |
 | LAMB | L1 | 否 | 2026-08-08 | Layer-wise Adaptive Moments optimizer for Batch training, LARS |
 | Lion | L1 | 否 | 2026-08-08 | EvoLved Sign Momentum |
@@ -45,7 +50,9 @@
 | Pinned Memory | L1 | 否 | 2026-08-04 | Page-Locked Memory, 锁页内存 |
 | Pipeline Parallel | L1 | 否 | 2026-07-27 | PP, 流水线并行 |
 | PyTorch | L1 | 否 | 2026-07-28 | torch |
+| PyTorch Autograd | L1 | 否 | 2026-08-14 | Autograd, grad_fn, 自动微分 |
 | ReduceScatter | L1 | 否 | 2026-07-27 | 规约散射 |
+| Reverse-Mode Automatic Differentiation | L1 | 否 | 2026-08-14 | Reverse-Mode AD, VJP |
 | SGD and Momentum | L1 | 否 | 2026-08-08 | SGD, Momentum SGD, Nesterov |
 | Shampoo | L1 | 否 | 2026-08-08 | Preconditioned Stochastic Tensor Optimization |
 | Tensor Parallel | L1 | 否 | 2026-07-27 | TP, 张量并行 |
@@ -188,8 +195,46 @@
 - Lion --component--> Optimizer
 - Shampoo --component--> Optimizer
 - Muon --component--> Optimizer
+- Backpropagation --implements--> PyTorch
+- Backpropagation --related--> DDP
+- Backpropagation --related--> FSDP
+- Backpropagation --related--> Mixed Precision Training
+- Chain Rule --component--> Backpropagation
+- Computational Graph --component--> Backpropagation
+- Reverse-Mode Automatic Differentiation --component--> Backpropagation
+- PyTorch Autograd --component--> Backpropagation
+- Gradient Accumulation --component--> Backpropagation
+- Activation Checkpointing --component--> Backpropagation
 
 ## 概念详情（每个点包含输出过的信息）
+
+### Activation Checkpointing  (掌握度 L1)
+- 别名：Gradient Checkpointing, 激活重计算
+
+**一句话结论**
+Activation Checkpointing只保存区间边界，在Backward时重算Forward中间值，以额外FLOP换更少Saved Activation显存。
+
+**机制**
+
+```
+理论梯度不变；需要恢复Dropout/RNG状态并避免有副作用算子。
+```
+
+**与反向传播的关系**
+Checkpoint粒度决定显存收益、重算开销和流水线性能。
+
+**最小示例**
+
+```
+# 通用局部backward模式
+upstream = dL_doutput
+dinput = vjp(upstream, saved_context)
+# 多路径时：input.grad += dinput
+```
+
+**常见误区**
+局部backward只需上游梯度和本算子上下文，不需要知道完整下游网络；梯度Shape应与被求导变量一致。
+- 关联：component→Backpropagation
 
 ### Adafactor  (掌握度 L1)
 - 别名：Factored Second Moment Optimizer
@@ -366,6 +411,63 @@ BF16范围更大；FP16在1附近更精细。二者同为2Byte。
 现代Ampere及以后GPU的大模型预训练、微调与Serving基线。
 - 关联：related→Numerical Precision; contrasts→FP16
 
+### Backpropagation  (掌握度 L1)
+- 别名：反向传播, Backward Pass, Backprop
+
+**一句话结论**
+反向传播是在前向计算图上从标量Loss出发，按反向拓扑顺序执行VJP：每个算子把上游梯度乘局部导数，分叉处累加，最终得到每个参数的梯度。Optimizer只消费梯度，不负责计算梯度。
+
+**训练迭代中的位置**
+
+_（此处为内嵌 SVG 图，请在 index.html 中查看）_
+
+**统一两层MLP Shape**
+
+_（此处为内嵌 SVG 图，请在 index.html 中查看）_
+
+**完整数值链路**
+
+```
+B=2,D=2,H=2,O=1。Forward得到Z1=[[2.5,-0.5],[0.5,1.0]]，A1=[[2.5,0],[0.5,1]]，Y_hat=[[1.1],[-0.3]]，L=0.025。Backward依次得到dY_hat=[[0.05],[-0.15]]；dW2=[[0.05],[-0.15]]；db2=[-0.1]；dZ1=[[0.02,0],[-0.06,0.09]]；dW1=[[0.08,-0.09],[-0.02,0.09]]；db1=[-0.04,0.09]。
+```
+
+**Linear Backward**
+
+```
+对Y=XW+b，收到dY[B,H]：dW=X^T dY，db=sum_batch(dY)，dX=dY W^T。矩阵转置来自Shape对齐和Batch收缩，不是需要死记的符号。
+```
+
+**ReLU 与梯度门控**
+
+```
+dZ=dA⊙1[Z>0]。本例Z1[0,1]=-0.5，因此即使dA1[0,1]=-0.03，dZ1[0,1]仍为0。
+```
+
+**分叉处梯度累加**
+
+_（此处为内嵌 SVG 图，请在 index.html 中查看）_
+
+**VJP 与 Reverse Mode**
+反向传播不构造完整Jacobian，而计算上游向量与局部Jacobian的乘积v^T J。神经网络参数很多、Loss通常是标量，因此Reverse-Mode AD一次反向即可得到所有参数梯度。
+
+**PyTorch 验证代码**
+
+```
+Z1=X@W1+b1
+A1=torch.relu(Z1)
+Y_hat=A1@W2+b2
+loss=((Y_hat-Y)**2).sum()/(2*X.shape[0])
+loss.backward()
+# 叶子参数的 .grad 保存dW1/db1/dW2/db2
+```
+
+**工程扩展**
+Mixed Precision在链式法则外增加Loss Scaling/Unscale；DDP在梯度Bucket就绪后AllReduce；FSDP用ReduceScatter聚合分片梯度；Pipeline Parallel把Activation Gradient通过P2P传给前一Stage；Activation Checkpoint用重算换激活显存。
+
+**常见误区**
+Backward传回的是Loss对中间变量的梯度而非Loss数值；loss.backward不会自动清空旧grad；广播的反向是沿广播轴求和；一个Tensor有多条下游路径时梯度必须累加。
+- 关联：implements→PyTorch; related→DDP; related→FSDP; related→Mixed Precision Training
+
 ### CPU-GPU Communication  (掌握度 L1)
 - 别名：CPU–GPU通信, Host-Device Data Movement
 
@@ -489,6 +591,62 @@ Copy Engine、SM、PCIe、HBM可能共享资源；时间线重叠不等于传输
 **计时**
 异步操作应用CUDA Event计时；普通CPU时钟若不在边界同步，常只测到提交时间。
 - 关联：related→CUDA; enables→Compute-Communication Overlap; related→H2D; related→D2H
+
+### Chain Rule  (掌握度 L1)
+- 别名：链式法则
+
+**一句话结论**
+复合函数的总导数等于沿依赖路径的局部导数乘积；多条路径的贡献相加。
+
+**机制**
+
+```
+若a=f(x), L=g(a)，则dL/dx=(dL/da)(da/dx)。若x经多条路径影响L，则dL/dx=Σ_path contribution。
+```
+
+**与反向传播的关系**
+链式法则决定反向数据依赖；Shape与局部Jacobian决定每个VJP。
+
+**最小示例**
+
+```
+# 通用局部backward模式
+upstream = dL_doutput
+dinput = vjp(upstream, saved_context)
+# 多路径时：input.grad += dinput
+```
+
+**常见误区**
+局部backward只需上游梯度和本算子上下文，不需要知道完整下游网络；梯度Shape应与被求导变量一致。
+- 关联：component→Backpropagation
+
+### Computational Graph  (掌握度 L1)
+- 别名：计算图, Dynamic Graph
+
+**一句话结论**
+计算图记录Tensor和算子之间的依赖，反向传播按反向拓扑序执行每个算子的backward。
+
+**机制**
+
+```
+节点是Tensor/算子，边是数据依赖。前向记录grad_fn和Saved Tensor；反向从Loss种子1出发。
+```
+
+**与反向传播的关系**
+分叉必须等待并累加全部下游梯度；执行后默认释放大部分Saved Tensor。
+
+**最小示例**
+
+```
+# 通用局部backward模式
+upstream = dL_doutput
+dinput = vjp(upstream, saved_context)
+# 多路径时：input.grad += dinput
+```
+
+**常见误区**
+局部backward只需上游梯度和本算子上下文，不需要知道完整下游网络；梯度Shape应与被求导变量一致。
+- 关联：component→Backpropagation
 
 ### Compute-Communication Overlap  (掌握度 L1)
 - 别名：计算通信重叠, overlap, 隐藏延迟
@@ -959,6 +1117,34 @@ NVMe/远程存储经DMA直接读写GPU Memory，避免CPU DRAM Bounce Buffer。
 **控制面**
 绕过CPU数据Bounce不等于没有CPU控制；驱动/API仍由CPU设置与提交。
 - 关联：related→CPU-GPU Communication; related→D2H; related→H2D
+
+### Gradient Accumulation  (掌握度 L1)
+- 别名：梯度累加, Micro-batch Accumulation
+
+**一句话结论**
+梯度累加既指计算图多路径贡献相加，也指多个Micro-batch的parameter.grad跨Backward累加。
+
+**机制**
+
+```
+若累加K个Micro-batches并想保持平均Loss语义，常令每个loss除以K再backward；Optimizer Step后zero_grad(set_to_none=True)。
+```
+
+**与反向传播的关系**
+忘记除K会放大梯度，忘记zero_grad会把上一个Optimizer Step的梯度继续累加。
+
+**最小示例**
+
+```
+# 通用局部backward模式
+upstream = dL_doutput
+dinput = vjp(upstream, saved_context)
+# 多路径时：input.grad += dinput
+```
+
+**常见误区**
+局部backward只需上游梯度和本算子上下文，不需要知道完整下游网络；梯度Shape应与被求导变量一致。
+- 关联：component→Backpropagation
 
 ### H2D  (掌握度 L1)
 - 别名：Host-to-Device, CPU到GPU传输
@@ -1580,6 +1766,34 @@ print(y.shape)
 PyTorch 直接在 GPU 上算是误解；Megatron 不是 PyTorch 竞品而是建在其上的多卡编排层。
 - 关联：implements→CUDA; enables→OpenAI Triton; related→Megatron
 
+### PyTorch Autograd  (掌握度 L1)
+- 别名：Autograd, grad_fn, 自动微分
+
+**一句话结论**
+PyTorch eager执行时动态构图，叶子参数grad默认累加，中间Tensor梯度临时流过；retain_grad可用于调试。
+
+**机制**
+
+```
+loss.backward以dL/dL=1为种子；每个grad_fn读取Saved Tensor执行VJP；默认Backward后释放计算图。
+```
+
+**与反向传播的关系**
+no_grad不建图；retain_graph延长激活生命周期；in-place操作和detach会改变梯度图。
+
+**最小示例**
+
+```
+# 通用局部backward模式
+upstream = dL_doutput
+dinput = vjp(upstream, saved_context)
+# 多路径时：input.grad += dinput
+```
+
+**常见误区**
+局部backward只需上游梯度和本算子上下文，不需要知道完整下游网络；梯度Shape应与被求导变量一致。
+- 关联：component→Backpropagation
+
 ### ReduceScatter  (掌握度 L1)
 - 别名：规约散射
 
@@ -1610,6 +1824,34 @@ _（此处为内嵌 SVG 图，请在 index.html 中查看）_
 **常见误区**
 误以为 ReduceScatter 比 AllReduce 通信更贵：单次约 M，是 AllReduce(2M) 的一半；FSDP 通信总量多是因为多了前向那次 AllGather，而非 ReduceScatter 本身贵。
 - 关联：component→Distributed Training Communication; enables→FSDP; related→AllReduce
+
+### Reverse-Mode Automatic Differentiation  (掌握度 L1)
+- 别名：Reverse-Mode AD, VJP
+
+**一句话结论**
+Reverse-Mode AD通过Vector-Jacobian Product避免显式构造巨大Jacobian，特别适合参数很多而输出Loss为标量的训练。
+
+**机制**
+
+```
+对f:R^n→R^m，上游v执行v^T J_f；从标量Loss反向一次即可得到对全部输入/参数的梯度。
+```
+
+**与反向传播的关系**
+它的内存代价是前向需要保存或重算backward上下文。
+
+**最小示例**
+
+```
+# 通用局部backward模式
+upstream = dL_doutput
+dinput = vjp(upstream, saved_context)
+# 多路径时：input.grad += dinput
+```
+
+**常见误区**
+局部backward只需上游梯度和本算子上下文，不需要知道完整下游网络；梯度Shape应与被求导变量一致。
+- 关联：component→Backpropagation
 
 ### SGD and Momentum  (掌握度 L1)
 - 别名：SGD, Momentum SGD, Nesterov
@@ -1947,3 +2189,10 @@ VPP = PP 的更细粒度 stage 切分 + interleaved 1F1B。它让每张 GPU 持�
 - [L0043] Lion (D2) — Lion只保存一阶Momentum，更新使用Momentum组合的sign，牺牲连续逐坐标幅度换取更低状态显存和简单更新。
 - [L0044] Shampoo (D2) — Shampoo为Tensor每个维度维护矩阵Preconditioner，用矩阵逆根捕获参数行列相关性，比Adam的对角预条件更丰富。
 - [L0045] Muon (D2) — Muon对二维权重的梯度Momentum做近似正交化，按矩阵结构调整奇异方向；通常与AdamW组成Hybrid Optimizer。
+- [L0046] Backpropagation (D2) — 通过B=2的两层MLP逐项手算Forward、MSE、Linear/ReLU Backward、所有参数梯度、SGD更新，并扩展到Autograd、混合精度和分布式训练。
+- [L0047] Chain Rule (D2) — 复合函数的总导数等于沿依赖路径的局部导数乘积；多条路径的贡献相加。
+- [L0048] Computational Graph (D2) — 计算图记录Tensor和算子之间的依赖，反向传播按反向拓扑序执行每个算子的backward。
+- [L0049] Reverse-Mode Automatic Differentiation (D2) — Reverse-Mode AD通过Vector-Jacobian Product避免显式构造巨大Jacobian，特别适合参数很多而输出Loss为标量的训练。
+- [L0050] PyTorch Autograd (D2) — PyTorch eager执行时动态构图，叶子参数grad默认累加，中间Tensor梯度临时流过；retain_grad可用于调试。
+- [L0051] Gradient Accumulation (D2) — 梯度累加既指计算图多路径贡献相加，也指多个Micro-batch的parameter.grad跨Backward累加。
+- [L0052] Activation Checkpointing (D2) — Activation Checkpointing只保存区间边界，在Backward时重算Forward中间值，以额外FLOP换更少Saved Activation显存。

@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-07-26T15:54:01+08:00",
-  "updated_at": "2026-08-07T15:34:12+08:00",
+  "updated_at": "2026-08-13T11:24:58+08:00",
   "nodes": {
     "Compute-Communication Overlap": {
       "concept": "Compute-Communication Overlap",
@@ -2932,6 +2932,478 @@
         ]
       },
       "group": "core"
+    },
+    "Backpropagation": {
+      "concept": "Backpropagation",
+      "aliases": [
+        "反向传播",
+        "Backward Pass",
+        "Backprop"
+      ],
+      "mastery": 1,
+      "needs_review": false,
+      "first_seen": "2026-08-13",
+      "last_seen": "2026-08-13",
+      "next_review": "2026-08-14",
+      "evidence": [],
+      "recommendations": [
+        {
+          "target": "Chain Rule",
+          "kind": "prerequisite",
+          "reason": "反向传播的数学基础",
+          "status": "open"
+        },
+        {
+          "target": "Forward-Mode AD",
+          "kind": "peer",
+          "reason": "与Reverse-Mode AD比较计算方向和复杂度",
+          "status": "open"
+        },
+        {
+          "target": "Transformer Backward",
+          "kind": "downstream",
+          "reason": "把Linear/ReLU扩展到Attention、RMSNorm和SwiGLU",
+          "status": "open"
+        }
+      ],
+      "content": {
+        "sections": [
+          {
+            "title": "一句话结论",
+            "type": "text",
+            "body": "反向传播是在前向计算图上从标量Loss出发，按反向拓扑顺序执行VJP：每个算子把上游梯度乘局部导数，分叉处累加，最终得到每个参数的梯度。Optimizer只消费梯度，不负责计算梯度。"
+          },
+          {
+            "title": "训练迭代中的位置",
+            "type": "svg",
+            "body": "<svg viewBox=\"0 0 680 430\" width=\"100%\" role=\"img\" xmlns=\"http://www.w3.org/2000/svg\"><title>一次训练迭代中的前向传播和反向传播</title><desc>前向从输入经过两层网络到Loss，反向从Loss沿相反方向计算各张量和参数的梯度，再由优化器更新参数。</desc><defs><marker id=\"arrow\" viewBox=\"0 0 10 10\" refX=\"8\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M2 1L8 5L2 9\" fill=\"none\" stroke=\"context-stroke\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></marker></defs><text x=\"40\" y=\"28\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"500\" fill=\"#26215C\">同一张计算图：上半部分前向算值，下半部分反向算梯度</text><text x=\"40\" y=\"72\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#0C447C\">Forward</text><g font-family=\"sans-serif\"><rect x=\"110\" y=\"52\" width=\"88\" height=\"52\" rx=\"9\" fill=\"#E6F1FB\" stroke=\"#185FA5\" stroke-width=\"0.5\"/><text x=\"154\" y=\"72\" font-size=\"13\" font-weight=\"500\" fill=\"#0C447C\" text-anchor=\"middle\">X</text><text x=\"154\" y=\"91\" font-size=\"11\" fill=\"#185FA5\" text-anchor=\"middle\">[B,D]</text><rect x=\"236\" y=\"52\" width=\"110\" height=\"52\" rx=\"9\" fill=\"#E6F1FB\" stroke=\"#185FA5\" stroke-width=\"0.5\"/><text x=\"291\" y=\"72\" font-size=\"13\" font-weight=\"500\" fill=\"#0C447C\" text-anchor=\"middle\">Linear+ReLU</text><text x=\"291\" y=\"91\" font-size=\"11\" fill=\"#185FA5\" text-anchor=\"middle\">A1 [B,H]</text><rect x=\"384\" y=\"52\" width=\"104\" height=\"52\" rx=\"9\" fill=\"#E6F1FB\" stroke=\"#185FA5\" stroke-width=\"0.5\"/><text x=\"436\" y=\"72\" font-size=\"13\" font-weight=\"500\" fill=\"#0C447C\" text-anchor=\"middle\">Linear</text><text x=\"436\" y=\"91\" font-size=\"11\" fill=\"#185FA5\" text-anchor=\"middle\">Y_hat [B,O]</text><rect x=\"526\" y=\"52\" width=\"104\" height=\"52\" rx=\"9\" fill=\"#EEEDFE\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"578\" y=\"72\" font-size=\"13\" font-weight=\"500\" fill=\"#26215C\" text-anchor=\"middle\">Loss</text><text x=\"578\" y=\"91\" font-size=\"11\" fill=\"#534AB7\" text-anchor=\"middle\">scalar</text></g><path d=\"M198 78 L232 78\" fill=\"none\" stroke=\"#185FA5\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><path d=\"M346 78 L380 78\" fill=\"none\" stroke=\"#185FA5\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><path d=\"M488 78 L522 78\" fill=\"none\" stroke=\"#185FA5\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><text x=\"40\" y=\"172\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#3C3489\">Backward</text><g font-family=\"sans-serif\"><rect x=\"526\" y=\"148\" width=\"104\" height=\"52\" rx=\"9\" fill=\"#EEEDFE\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"578\" y=\"168\" font-size=\"13\" font-weight=\"500\" fill=\"#26215C\" text-anchor=\"middle\">dL/dL</text><text x=\"578\" y=\"187\" font-size=\"11\" fill=\"#534AB7\" text-anchor=\"middle\">1</text><rect x=\"384\" y=\"148\" width=\"104\" height=\"52\" rx=\"9\" fill=\"#EEEDFE\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"436\" y=\"168\" font-size=\"13\" font-weight=\"500\" fill=\"#26215C\" text-anchor=\"middle\">dY_hat</text><text x=\"436\" y=\"187\" font-size=\"11\" fill=\"#534AB7\" text-anchor=\"middle\">[B,O]</text><rect x=\"236\" y=\"148\" width=\"110\" height=\"52\" rx=\"9\" fill=\"#EEEDFE\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"291\" y=\"168\" font-size=\"13\" font-weight=\"500\" fill=\"#26215C\" text-anchor=\"middle\">dA1 / dZ1</text><text x=\"291\" y=\"187\" font-size=\"11\" fill=\"#534AB7\" text-anchor=\"middle\">[B,H]</text><rect x=\"110\" y=\"148\" width=\"88\" height=\"52\" rx=\"9\" fill=\"#EEEDFE\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"154\" y=\"168\" font-size=\"13\" font-weight=\"500\" fill=\"#26215C\" text-anchor=\"middle\">dX</text><text x=\"154\" y=\"187\" font-size=\"11\" fill=\"#534AB7\" text-anchor=\"middle\">[B,D]</text></g><path d=\"M526 174 L492 174\" fill=\"none\" stroke=\"#534AB7\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><path d=\"M384 174 L350 174\" fill=\"none\" stroke=\"#534AB7\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><path d=\"M236 174 L202 174\" fill=\"none\" stroke=\"#534AB7\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><rect x=\"70\" y=\"250\" width=\"540\" height=\"104\" rx=\"14\" fill=\"#F1EFE8\" stroke=\"#5F5E5A\" stroke-width=\"0.5\"/><text x=\"90\" y=\"278\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#2C2C2A\">参数梯度在各层 backward 中产生</text><text x=\"90\" y=\"304\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#5F5E5A\">Linear 2 → dW2、db2；Linear 1 → dW1、db1；输入需要梯度时还产生 dX</text><text x=\"90\" y=\"330\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#A32D2D\">Optimizer 读取 parameter.grad；它不负责计算这些梯度。</text><rect x=\"210\" y=\"380\" width=\"260\" height=\"38\" rx=\"8\" fill=\"#E1F5EE\" stroke=\"#0F6E56\" stroke-width=\"0.5\"/><text x=\"340\" y=\"399\" font-family=\"sans-serif\" font-size=\"12\" font-weight=\"500\" fill=\"#04342C\" text-anchor=\"middle\" dominant-baseline=\"central\">Optimizer step：θ ← θ − η × grad</text></svg>"
+          },
+          {
+            "title": "统一两层MLP Shape",
+            "type": "svg",
+            "body": "<svg viewBox=\"0 0 680 520\" width=\"100%\" role=\"img\" xmlns=\"http://www.w3.org/2000/svg\"><title>两层 MLP 的张量 Shape 和反向梯度流</title><desc>展示B等于2的两层MLP中X、W1、Z1、A1、W2、预测和Loss的前向shape，以及相反方向的梯度shape。</desc><defs><marker id=\"arrow\" viewBox=\"0 0 10 10\" refX=\"8\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M2 1L8 5L2 9\" fill=\"none\" stroke=\"context-stroke\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></marker></defs><text x=\"40\" y=\"28\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"500\" fill=\"#26215C\">统一例子：B=2，D=2，H=2，O=1</text><text x=\"40\" y=\"66\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#0C447C\">Forward values</text><g font-family=\"sans-serif\"><rect x=\"40\" y=\"84\" width=\"94\" height=\"58\" rx=\"9\" fill=\"#E6F1FB\" stroke=\"#185FA5\" stroke-width=\"0.5\"/><text x=\"87\" y=\"105\" font-size=\"13\" font-weight=\"500\" fill=\"#0C447C\" text-anchor=\"middle\">X</text><text x=\"87\" y=\"126\" font-size=\"11\" fill=\"#185FA5\" text-anchor=\"middle\">[2,2]</text><rect x=\"170\" y=\"84\" width=\"112\" height=\"58\" rx=\"9\" fill=\"#E6F1FB\" stroke=\"#185FA5\" stroke-width=\"0.5\"/><text x=\"226\" y=\"105\" font-size=\"13\" font-weight=\"500\" fill=\"#0C447C\" text-anchor=\"middle\">XW1+b1</text><text x=\"226\" y=\"126\" font-size=\"11\" fill=\"#185FA5\" text-anchor=\"middle\">Z1 [2,2]</text><rect x=\"318\" y=\"84\" width=\"94\" height=\"58\" rx=\"9\" fill=\"#E6F1FB\" stroke=\"#185FA5\" stroke-width=\"0.5\"/><text x=\"365\" y=\"105\" font-size=\"13\" font-weight=\"500\" fill=\"#0C447C\" text-anchor=\"middle\">ReLU</text><text x=\"365\" y=\"126\" font-size=\"11\" fill=\"#185FA5\" text-anchor=\"middle\">A1 [2,2]</text><rect x=\"448\" y=\"84\" width=\"112\" height=\"58\" rx=\"9\" fill=\"#E6F1FB\" stroke=\"#185FA5\" stroke-width=\"0.5\"/><text x=\"504\" y=\"105\" font-size=\"13\" font-weight=\"500\" fill=\"#0C447C\" text-anchor=\"middle\">A1W2+b2</text><text x=\"504\" y=\"126\" font-size=\"11\" fill=\"#185FA5\" text-anchor=\"middle\">Y_hat [2,1]</text><rect x=\"596\" y=\"84\" width=\"44\" height=\"58\" rx=\"9\" fill=\"#EEEDFE\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"618\" y=\"105\" font-size=\"13\" font-weight=\"500\" fill=\"#26215C\" text-anchor=\"middle\">L</text><text x=\"618\" y=\"126\" font-size=\"11\" fill=\"#534AB7\" text-anchor=\"middle\">[]</text></g><path d=\"M134 113 L166 113\" fill=\"none\" stroke=\"#185FA5\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><path d=\"M282 113 L314 113\" fill=\"none\" stroke=\"#185FA5\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><path d=\"M412 113 L444 113\" fill=\"none\" stroke=\"#185FA5\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><path d=\"M560 113 L592 113\" fill=\"none\" stroke=\"#185FA5\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><rect x=\"168\" y=\"168\" width=\"116\" height=\"50\" rx=\"9\" fill=\"#F1EFE8\" stroke=\"#5F5E5A\" stroke-width=\"0.5\"/><text x=\"226\" y=\"187\" font-family=\"sans-serif\" font-size=\"12\" font-weight=\"500\" fill=\"#2C2C2A\" text-anchor=\"middle\">W1 [2,2]</text><text x=\"226\" y=\"205\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#5F5E5A\" text-anchor=\"middle\">b1 [2]</text><path d=\"M226 168 L226 146\" fill=\"none\" stroke=\"#5F5E5A\" stroke-width=\"1.2\" marker-end=\"url(#arrow)\"/><rect x=\"446\" y=\"168\" width=\"116\" height=\"50\" rx=\"9\" fill=\"#F1EFE8\" stroke=\"#5F5E5A\" stroke-width=\"0.5\"/><text x=\"504\" y=\"187\" font-family=\"sans-serif\" font-size=\"12\" font-weight=\"500\" fill=\"#2C2C2A\" text-anchor=\"middle\">W2 [2,1]</text><text x=\"504\" y=\"205\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#5F5E5A\" text-anchor=\"middle\">b2 [1]</text><path d=\"M504 168 L504 146\" fill=\"none\" stroke=\"#5F5E5A\" stroke-width=\"1.2\" marker-end=\"url(#arrow)\"/><text x=\"40\" y=\"270\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#3C3489\">Backward gradients</text><g font-family=\"sans-serif\"><rect x=\"548\" y=\"288\" width=\"92\" height=\"54\" rx=\"9\" fill=\"#EEEDFE\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"594\" y=\"309\" font-size=\"12\" font-weight=\"500\" fill=\"#26215C\" text-anchor=\"middle\">dY_hat</text><text x=\"594\" y=\"329\" font-size=\"11\" fill=\"#534AB7\" text-anchor=\"middle\">[2,1]</text><rect x=\"406\" y=\"288\" width=\"104\" height=\"54\" rx=\"9\" fill=\"#EEEDFE\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"458\" y=\"309\" font-size=\"12\" font-weight=\"500\" fill=\"#26215C\" text-anchor=\"middle\">dA1</text><text x=\"458\" y=\"329\" font-size=\"11\" fill=\"#534AB7\" text-anchor=\"middle\">[2,2]</text><rect x=\"264\" y=\"288\" width=\"104\" height=\"54\" rx=\"9\" fill=\"#EEEDFE\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"316\" y=\"309\" font-size=\"12\" font-weight=\"500\" fill=\"#26215C\" text-anchor=\"middle\">dZ1</text><text x=\"316\" y=\"329\" font-size=\"11\" fill=\"#534AB7\" text-anchor=\"middle\">[2,2]</text><rect x=\"122\" y=\"288\" width=\"104\" height=\"54\" rx=\"9\" fill=\"#EEEDFE\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"174\" y=\"309\" font-size=\"12\" font-weight=\"500\" fill=\"#26215C\" text-anchor=\"middle\">dX</text><text x=\"174\" y=\"329\" font-size=\"11\" fill=\"#534AB7\" text-anchor=\"middle\">[2,2]</text></g><path d=\"M548 315 L514 315\" fill=\"none\" stroke=\"#534AB7\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><path d=\"M406 315 L372 315\" fill=\"none\" stroke=\"#534AB7\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><path d=\"M264 315 L230 315\" fill=\"none\" stroke=\"#534AB7\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><rect x=\"386\" y=\"380\" width=\"144\" height=\"52\" rx=\"9\" fill=\"#E1F5EE\" stroke=\"#0F6E56\" stroke-width=\"0.5\"/><text x=\"458\" y=\"400\" font-family=\"sans-serif\" font-size=\"12\" font-weight=\"500\" fill=\"#04342C\" text-anchor=\"middle\">dW2 [2,1]</text><text x=\"458\" y=\"419\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#0F6E56\" text-anchor=\"middle\">db2 [1]</text><path d=\"M458 342 L458 376\" fill=\"none\" stroke=\"#0F6E56\" stroke-width=\"1.2\" marker-end=\"url(#arrow)\"/><rect x=\"244\" y=\"380\" width=\"144\" height=\"52\" rx=\"9\" fill=\"#E1F5EE\" stroke=\"#0F6E56\" stroke-width=\"0.5\"/><text x=\"316\" y=\"400\" font-family=\"sans-serif\" font-size=\"12\" font-weight=\"500\" fill=\"#04342C\" text-anchor=\"middle\">dW1 [2,2]</text><text x=\"316\" y=\"419\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#0F6E56\" text-anchor=\"middle\">db1 [2]</text><path d=\"M316 342 L316 376\" fill=\"none\" stroke=\"#0F6E56\" stroke-width=\"1.2\" marker-end=\"url(#arrow)\"/><rect x=\"90\" y=\"464\" width=\"500\" height=\"36\" rx=\"8\" fill=\"#FCEBEB\" stroke=\"#A32D2D\" stroke-width=\"0.5\"/><text x=\"340\" y=\"482\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#791F1F\" text-anchor=\"middle\" dominant-baseline=\"central\">每个梯度与被求导变量 Shape 相同；矩阵转置来自维度对齐。</text></svg>"
+          },
+          {
+            "title": "完整数值链路",
+            "type": "formula",
+            "body": "B=2,D=2,H=2,O=1。Forward得到Z1=[[2.5,-0.5],[0.5,1.0]]，A1=[[2.5,0],[0.5,1]]，Y_hat=[[1.1],[-0.3]]，L=0.025。Backward依次得到dY_hat=[[0.05],[-0.15]]；dW2=[[0.05],[-0.15]]；db2=[-0.1]；dZ1=[[0.02,0],[-0.06,0.09]]；dW1=[[0.08,-0.09],[-0.02,0.09]]；db1=[-0.04,0.09]。"
+          },
+          {
+            "title": "Linear Backward",
+            "type": "formula",
+            "body": "对Y=XW+b，收到dY[B,H]：dW=X^T dY，db=sum_batch(dY)，dX=dY W^T。矩阵转置来自Shape对齐和Batch收缩，不是需要死记的符号。"
+          },
+          {
+            "title": "ReLU 与梯度门控",
+            "type": "formula",
+            "body": "dZ=dA⊙1[Z>0]。本例Z1[0,1]=-0.5，因此即使dA1[0,1]=-0.03，dZ1[0,1]仍为0。"
+          },
+          {
+            "title": "分叉处梯度累加",
+            "type": "svg",
+            "body": "<svg viewBox=\"0 0 680 350\" width=\"100%\" role=\"img\" xmlns=\"http://www.w3.org/2000/svg\"><title>计算图分叉处的梯度累加</title><desc>变量x通过平方和乘3两条路径影响y，反向时两条路径对x的梯度贡献在x节点相加。</desc><defs><marker id=\"arrow\" viewBox=\"0 0 10 10\" refX=\"8\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M2 1L8 5L2 9\" fill=\"none\" stroke=\"context-stroke\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></marker></defs><text x=\"40\" y=\"28\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"500\" fill=\"#26215C\">同一个 Tensor 经过多条路径影响 Loss：反向贡献必须求和</text><rect x=\"54\" y=\"130\" width=\"88\" height=\"54\" rx=\"9\" fill=\"#E6F1FB\" stroke=\"#185FA5\" stroke-width=\"0.5\"/><text x=\"98\" y=\"151\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#0C447C\" text-anchor=\"middle\">x</text><text x=\"98\" y=\"171\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#185FA5\" text-anchor=\"middle\">shared input</text><rect x=\"226\" y=\"72\" width=\"108\" height=\"54\" rx=\"9\" fill=\"#E6F1FB\" stroke=\"#185FA5\" stroke-width=\"0.5\"/><text x=\"280\" y=\"93\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#0C447C\" text-anchor=\"middle\">a = x²</text><text x=\"280\" y=\"113\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#185FA5\" text-anchor=\"middle\">local: 2x</text><rect x=\"226\" y=\"190\" width=\"108\" height=\"54\" rx=\"9\" fill=\"#E6F1FB\" stroke=\"#185FA5\" stroke-width=\"0.5\"/><text x=\"280\" y=\"211\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#0C447C\" text-anchor=\"middle\">b = 3x</text><text x=\"280\" y=\"231\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#185FA5\" text-anchor=\"middle\">local: 3</text><rect x=\"430\" y=\"130\" width=\"104\" height=\"54\" rx=\"9\" fill=\"#EEEDFE\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"482\" y=\"151\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#26215C\" text-anchor=\"middle\">y = a+b</text><text x=\"482\" y=\"171\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#534AB7\" text-anchor=\"middle\">scalar</text><path d=\"M142 148 C174 120 192 101 222 99\" fill=\"none\" stroke=\"#185FA5\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><path d=\"M142 168 C174 196 192 215 222 217\" fill=\"none\" stroke=\"#185FA5\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><path d=\"M334 99 C374 105 392 130 426 148\" fill=\"none\" stroke=\"#185FA5\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><path d=\"M334 217 C374 211 392 184 426 166\" fill=\"none\" stroke=\"#185FA5\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><rect x=\"86\" y=\"270\" width=\"508\" height=\"52\" rx=\"10\" fill=\"#E1F5EE\" stroke=\"#0F6E56\" stroke-width=\"0.5\"/><text x=\"340\" y=\"290\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#04342C\" text-anchor=\"middle\">Backward 到 x：dx = dy×2x + dy×3</text><text x=\"340\" y=\"310\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#0F6E56\" text-anchor=\"middle\">Residual、参数共享、RNN 展开、同一参数多次使用都遵循这条规则</text><path d=\"M430 157 C360 280 190 280 142 174\" fill=\"none\" stroke=\"#534AB7\" stroke-width=\"1.2\" stroke-dasharray=\"5 4\" marker-end=\"url(#arrow)\"/></svg>"
+          },
+          {
+            "title": "VJP 与 Reverse Mode",
+            "type": "text",
+            "body": "反向传播不构造完整Jacobian，而计算上游向量与局部Jacobian的乘积v^T J。神经网络参数很多、Loss通常是标量，因此Reverse-Mode AD一次反向即可得到所有参数梯度。"
+          },
+          {
+            "title": "PyTorch 验证代码",
+            "type": "code",
+            "body": "Z1=X@W1+b1\nA1=torch.relu(Z1)\nY_hat=A1@W2+b2\nloss=((Y_hat-Y)**2).sum()/(2*X.shape[0])\nloss.backward()\n# 叶子参数的 .grad 保存dW1/db1/dW2/db2"
+          },
+          {
+            "title": "工程扩展",
+            "type": "text",
+            "body": "Mixed Precision在链式法则外增加Loss Scaling/Unscale；DDP在梯度Bucket就绪后AllReduce；FSDP用ReduceScatter聚合分片梯度；Pipeline Parallel把Activation Gradient通过P2P传给前一Stage；Activation Checkpoint用重算换激活显存。"
+          },
+          {
+            "title": "常见误区",
+            "type": "text",
+            "body": "Backward传回的是Loss对中间变量的梯度而非Loss数值；loss.backward不会自动清空旧grad；广播的反向是沿广播轴求和；一个Tensor有多条下游路径时梯度必须累加。"
+          }
+        ]
+      },
+      "group": "core"
+    },
+    "Chain Rule": {
+      "concept": "Chain Rule",
+      "aliases": [
+        "链式法则"
+      ],
+      "mastery": 1,
+      "needs_review": false,
+      "first_seen": "2026-08-13",
+      "last_seen": "2026-08-13",
+      "next_review": "2026-08-14",
+      "evidence": [],
+      "recommendations": [
+        {
+          "target": "Chain Rule",
+          "kind": "prerequisite",
+          "reason": "理解局部导数如何组合",
+          "status": "open"
+        },
+        {
+          "target": "Reverse-Mode Automatic Differentiation",
+          "kind": "peer",
+          "reason": "理解VJP和反向拓扑执行",
+          "status": "open"
+        },
+        {
+          "target": "Transformer Backward",
+          "kind": "downstream",
+          "reason": "应用到大模型核心算子",
+          "status": "open"
+        }
+      ],
+      "content": {
+        "sections": [
+          {
+            "title": "一句话结论",
+            "type": "text",
+            "body": "复合函数的总导数等于沿依赖路径的局部导数乘积；多条路径的贡献相加。"
+          },
+          {
+            "title": "机制",
+            "type": "formula",
+            "body": "若a=f(x), L=g(a)，则dL/dx=(dL/da)(da/dx)。若x经多条路径影响L，则dL/dx=Σ_path contribution。"
+          },
+          {
+            "title": "与反向传播的关系",
+            "type": "text",
+            "body": "链式法则决定反向数据依赖；Shape与局部Jacobian决定每个VJP。"
+          },
+          {
+            "title": "最小示例",
+            "type": "code",
+            "body": "# 通用局部backward模式\nupstream = dL_doutput\ndinput = vjp(upstream, saved_context)\n# 多路径时：input.grad += dinput"
+          },
+          {
+            "title": "常见误区",
+            "type": "text",
+            "body": "局部backward只需上游梯度和本算子上下文，不需要知道完整下游网络；梯度Shape应与被求导变量一致。"
+          }
+        ]
+      },
+      "group": "core"
+    },
+    "Computational Graph": {
+      "concept": "Computational Graph",
+      "aliases": [
+        "计算图",
+        "Dynamic Graph"
+      ],
+      "mastery": 1,
+      "needs_review": false,
+      "first_seen": "2026-08-13",
+      "last_seen": "2026-08-13",
+      "next_review": "2026-08-14",
+      "evidence": [],
+      "recommendations": [
+        {
+          "target": "Chain Rule",
+          "kind": "prerequisite",
+          "reason": "理解局部导数如何组合",
+          "status": "open"
+        },
+        {
+          "target": "Reverse-Mode Automatic Differentiation",
+          "kind": "peer",
+          "reason": "理解VJP和反向拓扑执行",
+          "status": "open"
+        },
+        {
+          "target": "Transformer Backward",
+          "kind": "downstream",
+          "reason": "应用到大模型核心算子",
+          "status": "open"
+        }
+      ],
+      "content": {
+        "sections": [
+          {
+            "title": "一句话结论",
+            "type": "text",
+            "body": "计算图记录Tensor和算子之间的依赖，反向传播按反向拓扑序执行每个算子的backward。"
+          },
+          {
+            "title": "机制",
+            "type": "formula",
+            "body": "节点是Tensor/算子，边是数据依赖。前向记录grad_fn和Saved Tensor；反向从Loss种子1出发。"
+          },
+          {
+            "title": "与反向传播的关系",
+            "type": "text",
+            "body": "分叉必须等待并累加全部下游梯度；执行后默认释放大部分Saved Tensor。"
+          },
+          {
+            "title": "最小示例",
+            "type": "code",
+            "body": "# 通用局部backward模式\nupstream = dL_doutput\ndinput = vjp(upstream, saved_context)\n# 多路径时：input.grad += dinput"
+          },
+          {
+            "title": "常见误区",
+            "type": "text",
+            "body": "局部backward只需上游梯度和本算子上下文，不需要知道完整下游网络；梯度Shape应与被求导变量一致。"
+          }
+        ]
+      },
+      "group": "core"
+    },
+    "Reverse-Mode Automatic Differentiation": {
+      "concept": "Reverse-Mode Automatic Differentiation",
+      "aliases": [
+        "Reverse-Mode AD",
+        "VJP"
+      ],
+      "mastery": 1,
+      "needs_review": false,
+      "first_seen": "2026-08-13",
+      "last_seen": "2026-08-13",
+      "next_review": "2026-08-14",
+      "evidence": [],
+      "recommendations": [
+        {
+          "target": "Chain Rule",
+          "kind": "prerequisite",
+          "reason": "理解局部导数如何组合",
+          "status": "open"
+        },
+        {
+          "target": "Reverse-Mode Automatic Differentiation",
+          "kind": "peer",
+          "reason": "理解VJP和反向拓扑执行",
+          "status": "open"
+        },
+        {
+          "target": "Transformer Backward",
+          "kind": "downstream",
+          "reason": "应用到大模型核心算子",
+          "status": "open"
+        }
+      ],
+      "content": {
+        "sections": [
+          {
+            "title": "一句话结论",
+            "type": "text",
+            "body": "Reverse-Mode AD通过Vector-Jacobian Product避免显式构造巨大Jacobian，特别适合参数很多而输出Loss为标量的训练。"
+          },
+          {
+            "title": "机制",
+            "type": "formula",
+            "body": "对f:R^n→R^m，上游v执行v^T J_f；从标量Loss反向一次即可得到对全部输入/参数的梯度。"
+          },
+          {
+            "title": "与反向传播的关系",
+            "type": "text",
+            "body": "它的内存代价是前向需要保存或重算backward上下文。"
+          },
+          {
+            "title": "最小示例",
+            "type": "code",
+            "body": "# 通用局部backward模式\nupstream = dL_doutput\ndinput = vjp(upstream, saved_context)\n# 多路径时：input.grad += dinput"
+          },
+          {
+            "title": "常见误区",
+            "type": "text",
+            "body": "局部backward只需上游梯度和本算子上下文，不需要知道完整下游网络；梯度Shape应与被求导变量一致。"
+          }
+        ]
+      },
+      "group": "core"
+    },
+    "PyTorch Autograd": {
+      "concept": "PyTorch Autograd",
+      "aliases": [
+        "Autograd",
+        "grad_fn",
+        "自动微分"
+      ],
+      "mastery": 1,
+      "needs_review": false,
+      "first_seen": "2026-08-13",
+      "last_seen": "2026-08-13",
+      "next_review": "2026-08-14",
+      "evidence": [],
+      "recommendations": [
+        {
+          "target": "Chain Rule",
+          "kind": "prerequisite",
+          "reason": "理解局部导数如何组合",
+          "status": "open"
+        },
+        {
+          "target": "Reverse-Mode Automatic Differentiation",
+          "kind": "peer",
+          "reason": "理解VJP和反向拓扑执行",
+          "status": "open"
+        },
+        {
+          "target": "Transformer Backward",
+          "kind": "downstream",
+          "reason": "应用到大模型核心算子",
+          "status": "open"
+        }
+      ],
+      "content": {
+        "sections": [
+          {
+            "title": "一句话结论",
+            "type": "text",
+            "body": "PyTorch eager执行时动态构图，叶子参数grad默认累加，中间Tensor梯度临时流过；retain_grad可用于调试。"
+          },
+          {
+            "title": "机制",
+            "type": "formula",
+            "body": "loss.backward以dL/dL=1为种子；每个grad_fn读取Saved Tensor执行VJP；默认Backward后释放计算图。"
+          },
+          {
+            "title": "与反向传播的关系",
+            "type": "text",
+            "body": "no_grad不建图；retain_graph延长激活生命周期；in-place操作和detach会改变梯度图。"
+          },
+          {
+            "title": "最小示例",
+            "type": "code",
+            "body": "# 通用局部backward模式\nupstream = dL_doutput\ndinput = vjp(upstream, saved_context)\n# 多路径时：input.grad += dinput"
+          },
+          {
+            "title": "常见误区",
+            "type": "text",
+            "body": "局部backward只需上游梯度和本算子上下文，不需要知道完整下游网络；梯度Shape应与被求导变量一致。"
+          }
+        ]
+      },
+      "group": "framework"
+    },
+    "Gradient Accumulation": {
+      "concept": "Gradient Accumulation",
+      "aliases": [
+        "梯度累加",
+        "Micro-batch Accumulation"
+      ],
+      "mastery": 1,
+      "needs_review": false,
+      "first_seen": "2026-08-13",
+      "last_seen": "2026-08-13",
+      "next_review": "2026-08-14",
+      "evidence": [],
+      "recommendations": [
+        {
+          "target": "Chain Rule",
+          "kind": "prerequisite",
+          "reason": "理解局部导数如何组合",
+          "status": "open"
+        },
+        {
+          "target": "Reverse-Mode Automatic Differentiation",
+          "kind": "peer",
+          "reason": "理解VJP和反向拓扑执行",
+          "status": "open"
+        },
+        {
+          "target": "Transformer Backward",
+          "kind": "downstream",
+          "reason": "应用到大模型核心算子",
+          "status": "open"
+        }
+      ],
+      "content": {
+        "sections": [
+          {
+            "title": "一句话结论",
+            "type": "text",
+            "body": "梯度累加既指计算图多路径贡献相加，也指多个Micro-batch的parameter.grad跨Backward累加。"
+          },
+          {
+            "title": "机制",
+            "type": "formula",
+            "body": "若累加K个Micro-batches并想保持平均Loss语义，常令每个loss除以K再backward；Optimizer Step后zero_grad(set_to_none=True)。"
+          },
+          {
+            "title": "与反向传播的关系",
+            "type": "text",
+            "body": "忘记除K会放大梯度，忘记zero_grad会把上一个Optimizer Step的梯度继续累加。"
+          },
+          {
+            "title": "最小示例",
+            "type": "code",
+            "body": "# 通用局部backward模式\nupstream = dL_doutput\ndinput = vjp(upstream, saved_context)\n# 多路径时：input.grad += dinput"
+          },
+          {
+            "title": "常见误区",
+            "type": "text",
+            "body": "局部backward只需上游梯度和本算子上下文，不需要知道完整下游网络；梯度Shape应与被求导变量一致。"
+          }
+        ]
+      },
+      "group": "core"
+    },
+    "Activation Checkpointing": {
+      "concept": "Activation Checkpointing",
+      "aliases": [
+        "Gradient Checkpointing",
+        "激活重计算"
+      ],
+      "mastery": 1,
+      "needs_review": false,
+      "first_seen": "2026-08-13",
+      "last_seen": "2026-08-13",
+      "next_review": "2026-08-14",
+      "evidence": [],
+      "recommendations": [
+        {
+          "target": "Chain Rule",
+          "kind": "prerequisite",
+          "reason": "理解局部导数如何组合",
+          "status": "open"
+        },
+        {
+          "target": "Reverse-Mode Automatic Differentiation",
+          "kind": "peer",
+          "reason": "理解VJP和反向拓扑执行",
+          "status": "open"
+        },
+        {
+          "target": "Transformer Backward",
+          "kind": "downstream",
+          "reason": "应用到大模型核心算子",
+          "status": "open"
+        }
+      ],
+      "content": {
+        "sections": [
+          {
+            "title": "一句话结论",
+            "type": "text",
+            "body": "Activation Checkpointing只保存区间边界，在Backward时重算Forward中间值，以额外FLOP换更少Saved Activation显存。"
+          },
+          {
+            "title": "机制",
+            "type": "formula",
+            "body": "理论梯度不变；需要恢复Dropout/RNG状态并避免有副作用算子。"
+          },
+          {
+            "title": "与反向传播的关系",
+            "type": "text",
+            "body": "Checkpoint粒度决定显存收益、重算开销和流水线性能。"
+          },
+          {
+            "title": "最小示例",
+            "type": "code",
+            "body": "# 通用局部backward模式\nupstream = dL_doutput\ndinput = vjp(upstream, saved_context)\n# 多路径时：input.grad += dinput"
+          },
+          {
+            "title": "常见误区",
+            "type": "text",
+            "body": "局部backward只需上游梯度和本算子上下文，不需要知道完整下游网络；梯度Shape应与被求导变量一致。"
+          }
+        ]
+      },
+      "group": "memory"
     }
   },
   "edges": [
@@ -3599,6 +4071,56 @@
       "source": "Muon",
       "target": "Optimizer",
       "type": "component"
+    },
+    {
+      "source": "Backpropagation",
+      "target": "PyTorch",
+      "type": "implements"
+    },
+    {
+      "source": "Backpropagation",
+      "target": "DDP",
+      "type": "related"
+    },
+    {
+      "source": "Backpropagation",
+      "target": "FSDP",
+      "type": "related"
+    },
+    {
+      "source": "Backpropagation",
+      "target": "Mixed Precision Training",
+      "type": "related"
+    },
+    {
+      "source": "Chain Rule",
+      "target": "Backpropagation",
+      "type": "component"
+    },
+    {
+      "source": "Computational Graph",
+      "target": "Backpropagation",
+      "type": "component"
+    },
+    {
+      "source": "Reverse-Mode Automatic Differentiation",
+      "target": "Backpropagation",
+      "type": "component"
+    },
+    {
+      "source": "PyTorch Autograd",
+      "target": "Backpropagation",
+      "type": "component"
+    },
+    {
+      "source": "Gradient Accumulation",
+      "target": "Backpropagation",
+      "type": "component"
+    },
+    {
+      "source": "Activation Checkpointing",
+      "target": "Backpropagation",
+      "type": "component"
     }
   ],
   "lessons": [
@@ -3961,6 +4483,62 @@
       "depth": "D2",
       "question_summary": "主流训练优化器的机制、状态成本与适用场景。",
       "answer_summary": "Muon对二维权重的梯度Momentum做近似正交化，按矩阵结构调整奇异方向；通常与AdamW组成Hybrid Optimizer。"
+    },
+    {
+      "id": "L0046",
+      "at": "2026-08-13T11:24:58+08:00",
+      "concept": "Backpropagation",
+      "depth": "D2",
+      "question_summary": "从头到尾讲解一次反向传播，包含具体数值、shape和图示。",
+      "answer_summary": "通过B=2的两层MLP逐项手算Forward、MSE、Linear/ReLU Backward、所有参数梯度、SGD更新，并扩展到Autograd、混合精度和分布式训练。"
+    },
+    {
+      "id": "L0047",
+      "at": "2026-08-13T11:24:58+08:00",
+      "concept": "Chain Rule",
+      "depth": "D2",
+      "question_summary": "反向传播中的关键基础机制。",
+      "answer_summary": "复合函数的总导数等于沿依赖路径的局部导数乘积；多条路径的贡献相加。"
+    },
+    {
+      "id": "L0048",
+      "at": "2026-08-13T11:24:58+08:00",
+      "concept": "Computational Graph",
+      "depth": "D2",
+      "question_summary": "反向传播中的关键基础机制。",
+      "answer_summary": "计算图记录Tensor和算子之间的依赖，反向传播按反向拓扑序执行每个算子的backward。"
+    },
+    {
+      "id": "L0049",
+      "at": "2026-08-13T11:24:58+08:00",
+      "concept": "Reverse-Mode Automatic Differentiation",
+      "depth": "D2",
+      "question_summary": "反向传播中的关键基础机制。",
+      "answer_summary": "Reverse-Mode AD通过Vector-Jacobian Product避免显式构造巨大Jacobian，特别适合参数很多而输出Loss为标量的训练。"
+    },
+    {
+      "id": "L0050",
+      "at": "2026-08-13T11:24:58+08:00",
+      "concept": "PyTorch Autograd",
+      "depth": "D2",
+      "question_summary": "反向传播中的关键基础机制。",
+      "answer_summary": "PyTorch eager执行时动态构图，叶子参数grad默认累加，中间Tensor梯度临时流过；retain_grad可用于调试。"
+    },
+    {
+      "id": "L0051",
+      "at": "2026-08-13T11:24:58+08:00",
+      "concept": "Gradient Accumulation",
+      "depth": "D2",
+      "question_summary": "反向传播中的关键基础机制。",
+      "answer_summary": "梯度累加既指计算图多路径贡献相加，也指多个Micro-batch的parameter.grad跨Backward累加。"
+    },
+    {
+      "id": "L0052",
+      "at": "2026-08-13T11:24:58+08:00",
+      "concept": "Activation Checkpointing",
+      "depth": "D2",
+      "question_summary": "反向传播中的关键基础机制。",
+      "answer_summary": "Activation Checkpointing只保存区间边界，在Backward时重算Forward中间值，以额外FLOP换更少Saved Activation显存。"
     }
   ]
 }
