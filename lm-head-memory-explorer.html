@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LM Head 动态显存与计算分析器</title>
+<style>
+:root{--ink:#172033;--muted:#647084;--line:#dfe4eb;--paper:#fff;--canvas:#f5f7fa;--blue:#185fa5;--blue2:#85b7eb;--purple:#534ab7;--purple2:#afA9ec;--teal:#0f6e56;--teal2:#9fe1cb;--amber:#ba7517;--amber2:#fac775;--red:#a32d2d;--red2:#f09595;--gray:#888780;--gray2:#d3d1c7}
+*{box-sizing:border-box}html,body{max-width:100%;overflow-x:hidden}body{margin:0;background:var(--canvas);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;line-height:1.55}.page{max-width:1480px;margin:auto;padding:24px}.hero{background:#fff;border:1px solid var(--line);border-radius:18px;padding:24px 28px;margin-bottom:16px}.hero h1{font-size:28px;margin:0 0 6px;font-weight:650}.hero p{margin:0;color:var(--muted)}.layout{display:grid;grid-template-columns:320px minmax(0,1fr);gap:16px}main,.panel{min-width:0}.panel{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px}.controls{position:sticky;top:12px;align-self:start}.controls h2,.panel h2{font-size:17px;margin:0 0 14px}.field{margin:0 0 13px}.field label{display:flex;justify-content:space-between;font-size:13px;color:var(--muted);margin-bottom:5px}.field input,.field select{width:100%;padding:8px 10px;border:1px solid #cfd6df;border-radius:8px;background:#fff;color:var(--ink)}.presets{display:flex;flex-wrap:wrap;gap:7px;margin-bottom:16px}.presets button{border:1px solid #cfd6df;background:#fff;border-radius:999px;padding:6px 9px;cursor:pointer;color:var(--ink)}.presets button:hover{border-color:var(--blue);color:var(--blue)}.hint{font-size:12px;color:var(--muted);background:#f6f8fa;border-radius:10px;padding:10px}.metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-bottom:16px}.metric{background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px}.metric .k{font-size:12px;color:var(--muted)}.metric .v{font-size:23px;font-weight:650;margin-top:3px}.metric .s{font-size:11px;color:var(--muted)}.chartHead{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}.legend{display:flex;flex-wrap:wrap;gap:9px;font-size:11px;color:var(--muted)}.legend span{display:flex;align-items:center;gap:4px}.dot{width:10px;height:10px;border-radius:2px;display:inline-block}.timeline{margin-top:12px}.phase{display:grid;grid-template-columns:132px minmax(0,1fr) 90px;gap:10px;align-items:center;margin:11px 0}.phaseName{font-size:12px}.bar{height:28px;background:#eef1f5;border-radius:7px;display:flex;overflow:hidden}.seg{height:100%;min-width:0;transition:width .25s}.phaseVal{text-align:right;font-variant-numeric:tabular-nums;font-size:12px}.peak{outline:2px solid #a32d2d;outline-offset:2px}.tableWrap{overflow:auto;margin-top:12px}table{width:100%;border-collapse:collapse;font-size:12px;min-width:820px}th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}th{background:#f6f8fa;position:sticky;top:0}.compare{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px}.callout{border-left:4px solid var(--blue);background:#f5f9fd;border-radius:8px;padding:12px 14px}.callout.warn{border-color:var(--amber);background:#fff9ed}.formula{white-space:pre-wrap;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#f6f8fa;border-radius:10px;padding:12px;font-size:12px;overflow:auto}.stepper{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;margin-top:12px}.step{border:1px solid var(--line);border-radius:10px;padding:10px;font-size:12px;background:#fff}.step b{display:block;color:var(--blue);margin-bottom:4px}.footer{color:var(--muted);font-size:12px;margin:18px 2px}@media(max-width:980px){.layout{grid-template-columns:1fr}.controls{position:static}.metrics{grid-template-columns:repeat(2,1fr)}.compare{grid-template-columns:1fr}.stepper{grid-template-columns:1fr}.phase{grid-template-columns:100px minmax(0,1fr) 80px}.page{padding:12px}.hero{padding:18px}}
+</style>
+</head>
+<body>
+<div class="page">
+<section class="hero"><h1>LM Head 动态显存与计算分析器</h1><p>调整 Batch、Sequence、Hidden、Vocabulary、TP 与 Chunk，观察前向/反向每一步的 Shape、FLOPs 和逐阶段显存峰值。默认模型是解析估算，不替代真实 Profiler。</p></section>
+<div class="layout">
+<aside class="panel controls">
+<h2>模型与实现参数</h2>
+<div class="presets"><button data-preset="tiny">小型训练估算</button><button data-preset="train">4K hidden / 128K vocab</button><button data-preset="long">长上下文</button></div>
+<div class="field"><label><span>实现方案</span></label><select id="strategy"><option value="baseline">标准 Linear + CE</option><option value="tp">Vocabulary Parallel</option><option value="tokenChunk">Token Chunk Fused CE</option><option value="vocabChunk">Vocabulary Chunk Fused CE</option><option value="tpChunk">TP + 双维 Chunk</option><option value="cce">CCE-like Tile Kernel</option></select></div>
+<div class="field"><label><span>Micro Batch B</span><span id="Bv"></span></label><input id="B" type="range" min="1" max="16" step="1" value="2"></div>
+<div class="field"><label><span>Sequence S</span><span id="Sv"></span></label><input id="S" type="range" min="128" max="131072" step="128" value="8192"></div>
+<div class="field"><label><span>有效 Token 比例</span><span id="validv"></span></label><input id="valid" type="range" min="0.1" max="1" step="0.05" value="1"></div>
+<div class="field"><label><span>Hidden H</span><span id="Hv"></span></label><select id="H"><option>1024</option><option>2048</option><option selected>4096</option><option>5120</option><option>8192</option><option>12288</option></select></div>
+<div class="field"><label><span>Vocabulary V</span><span id="Vv"></span></label><input id="V" type="number" min="1024" step="128" value="128256"></div>
+<div class="field"><label><span>Activation / Logits dtype</span></label><select id="dtype"><option value="2" selected>BF16 / FP16 · 2 Byte</option><option value="4">FP32 · 4 Byte</option><option value="1">FP8 · 1 Byte（仅容量假设）</option></select></div>
+<div class="field"><label><span>Tensor Parallel</span><span id="TPv"></span></label><select id="TP"><option selected>1</option><option>2</option><option>4</option><option>8</option><option>16</option></select></div>
+<div class="field"><label><span>Token Chunk Cₜ</span><span id="TCv"></span></label><input id="TC" type="number" min="1" step="32" value="256"></div>
+<div class="field"><label><span>Vocab Chunk Cᵥ</span><span id="VCv"></span></label><input id="VC" type="number" min="128" step="128" value="4096"></div>
+<div class="field"><label><span>显示静态 LM Head 权重/梯度</span></label><select id="static"><option value="1" selected>显示</option><option value="0">只看动态激活/临时量</option></select></div>
+<div class="hint">口径：每 Rank 峰值解析估算；包含 LM Head 权重、权重梯度、输入隐藏状态、输出梯度、显式 Logits/Chunk、Softmax 统计和近似通信 Buffer；不包含 CUDA allocator 碎片、cuBLAS workspace、框架内部额外副本与模型其他层。</div>
+</aside>
+<main>
+<section class="metrics" id="metrics"></section>
+<section class="panel">
+<div class="chartHead"><div><h2>逐阶段显存时间线</h2><div id="subtitle" style="font-size:12px;color:var(--muted)"></div></div><div class="legend" id="legend"></div></div>
+<div id="timeline" class="timeline"></div>
+</section>
+<section class="compare">
+<div class="panel"><h2>与标准实现对比</h2><div id="comparison"></div></div>
+<div class="panel"><h2>当前方案的关键代价</h2><div id="tradeoff"></div></div>
+</section>
+<section class="panel" style="margin-top:16px"><h2>每一步：计算、Shape 与显存变化</h2><div class="stepper"><div class="step"><b>1 · Final norm</b>得到 H_final [N,H]</div><div class="step"><b>2 · Vocab projection</b>H_final × W_vocabᵀ</div><div class="step"><b>3 · Stable CE</b>max → exp-sum → target</div><div class="step"><b>4 · CE backward</b>dZ = P − one_hot</div><div class="step"><b>5 · Linear backward</b>dH=dZW；dW=dZᵀH</div></div><div class="tableWrap"><table><thead><tr><th>阶段</th><th>核心操作</th><th>输入 → 输出 Shape</th><th>本阶段 FLOPs</th><th>关键活跃大 Tensor</th><th>阶段显存</th></tr></thead><tbody id="steps"></tbody></table></div></section>
+<section class="panel" style="margin-top:16px"><h2>公式与口径</h2><div class="formula" id="formula"></div><div class="callout warn" style="margin-top:12px">标准路径峰值采用“显式 Logits 与 dLogits 可能同时活跃”的上界模型；实际 PyTorch、Megatron、Triton 或厂商 Kernel 可能通过原地覆盖、Buffer 复用、重计算和 Fusion 改变峰值。优化验收应同时使用 max_memory_allocated、memory snapshot 与 Nsight Systems/Compute。</div></section>
+<div class="footer">所有数值为解析估算。CCE-like 的计算量按“Forward 后在 Backward 重算 Logits”的保守上界计算；稀疏梯度过滤带来的实际 FLOPs 降低未计入。Vocabulary Parallel 通信量按 Ring AllReduce 近似每 Rank 链路字节估算。</div>
+</main>
+</div>
+</div>
+<script>
+const $=id=>document.getElementById(id);const ids=['strategy','B','S','valid','H','V','dtype','TP','TC','VC','static'];
+const colors={weight:'#888780',wgrad:'#ba7517',hidden:'#185fa5',logits:'#7f77dd',dlogits:'#a32d2d',stats:'#0f6e56',dhidden:'#378add',comm:'#ef9f27'};
+const labels={weight:'W 参数',wgrad:'dW',hidden:'H / saved input',logits:'Logits / tile',dlogits:'dLogits / grad tile',stats:'Softmax stats',dhidden:'dH',comm:'通信 buffer'};
+const fmtInt=x=>new Intl.NumberFormat('en-US').format(Math.round(x));
+function bytes(x){if(x<1024)return x.toFixed(0)+' B';if(x<2**20)return(x/2**10).toFixed(1)+' KiB';if(x<2**30)return(x/2**20).toFixed(1)+' MiB';return(x/2**30).toFixed(2)+' GiB'}
+function flops(x){if(x<1e9)return(x/1e6).toFixed(1)+' MF';if(x<1e12)return(x/1e9).toFixed(2)+' GF';return(x/1e12).toFixed(2)+' TF'}
+function val(){return{strategy:$('strategy').value,B:+$('B').value,S:+$('S').value,valid:+$('valid').value,H:+$('H').value,V:+$('V').value,d:+$('dtype').value,tp:+$('TP').value,tc:+$('TC').value,vc:+$('VC').value,showStatic:+$('static').value}}
+function ring(payload,p){return p<=1?0:2*(p-1)/p*payload}
+function build(x){const N=Math.max(1,Math.ceil(x.B*x.S*x.valid));const tpUsed=['tp','tpChunk','cce'].includes(x.strategy)?x.tp:1;const vLocal=Math.ceil(x.V/tpUsed);const W=vLocal*x.H*x.d;const WG=W;const Hs=N*x.H*x.d;const dH=Hs;const stats=N*12;const target=N*4;const fullL=N*vLocal*x.d;let tile=fullL;let recompute=false;let desc='';
+if(x.strategy==='tokenChunk'){tile=Math.min(N,x.tc)*x.V*x.d;recompute=true;desc='沿 Token 维分块；必须由自定义 Autograd/逐块 backward 才能真正释放大图。'}
+if(x.strategy==='vocabChunk'){tile=N*Math.min(x.V,x.vc)*x.d;recompute=true;desc='沿 Vocabulary 维在线维护 max 与 sum-exp；Backward 重算 Vocab Chunk。'}
+if(x.strategy==='tpChunk'){tile=Math.min(N,x.tc)*Math.min(vLocal,x.vc)*x.d;recompute=true;desc='Vocabulary Parallel 后再做 Token/Vocab 双维分块；显存最低但调度与通信更复杂。'}
+if(x.strategy==='cce'){tile=Math.min(N,Math.min(x.tc,256))*Math.min(vLocal,Math.min(x.vc,4096))*x.d;recompute=true;desc='CCE-like Kernel：Tile 在片上/短生命周期 Buffer 中完成 dot-product、LSE 和梯度。'}
+if(x.strategy==='tp')desc='Vocabulary 权重与 Logits 按 TP 分片；Cross Entropy 用全局 max/sum-exp，dH 需跨 TP 归约。';
+if(x.strategy==='baseline')desc='标准显式 Linear + Cross Entropy；完整 [N,V] Logits 进入计算图。';
+const logits=x.strategy==='baseline'||x.strategy==='tp'?fullL:tile;const dlogits=logits;const commStats=tpUsed>1?N*12:0;const commDH=tpUsed>1?N*x.H*x.d:0;const staticW=x.showStatic?W:0;const staticWG=x.showStatic?WG:0;
+let phases=[
+{name:'输入就绪',op:'读取最后层隐藏状态与 LM Head 权重',shape:`H [${fmtInt(N)},${fmtInt(x.H)}], W [${fmtInt(vLocal)},${fmtInt(x.H)}]`,f:0,c:{weight:staticW,hidden:Hs}},
+{name:'Vocab 投影',op:x.strategy==='baseline'||x.strategy==='tp'?'H × Wᵀ，显式生成 Logits':'按 Chunk/Tile 计算 H × W_chunkᵀ',shape:`→ logits/tile [${x.strategy==='baseline'||x.strategy==='tp'?fmtInt(N):fmtInt(Math.min(N,x.tc))},${fmtInt(x.strategy==='tokenChunk'?x.V:(x.strategy==='baseline'||x.strategy==='tp'?vLocal:Math.min(vLocal,x.vc)))}]`,f:2*N*x.H*x.V/tpUsed,c:{weight:staticW,hidden:Hs,logits}},
+{name:'稳定 CE',op:'全局/分块 max、exp、sum-exp、target logit',shape:`stats [${fmtInt(N)}], target [${fmtInt(N)}]`,f:4*N*x.V/tpUsed,c:{weight:staticW,hidden:Hs,logits,stats:stats+target,comm:commStats}},
+{name:'CE backward',op:'dZ = (softmax − one_hot) × upstream',shape:`dZ/tile 与 logits/tile 同形`,f:N*x.V/tpUsed,c:{weight:staticW,hidden:Hs,logits,dlogits,stats:stats+target,comm:commStats}},
+{name:'dH 计算',op:'dH = dZ × W；TP 时归约 dH',shape:`dH [${fmtInt(N)},${fmtInt(x.H)}]`,f:2*N*x.H*x.V/tpUsed,c:{weight:staticW,hidden:Hs,dlogits,dhidden:dH,comm:commDH}},
+{name:'dW 计算',op:'dW = dZᵀ × H；分块时累加各 Chunk',shape:`dW [${fmtInt(vLocal)},${fmtInt(x.H)}]`,f:2*N*x.H*x.V/tpUsed,c:{weight:staticW,wgrad:staticWG,hidden:Hs,dhidden:dH,logits:recompute?tile:0,dlogits:recompute?tile:0}},
+{name:'释放临时量',op:'保留参数梯度，交给 Optimizer/梯度同步',shape:`dW [${fmtInt(vLocal)},${fmtInt(x.H)}]`,f:0,c:{weight:staticW,wgrad:staticWG}}
+];
+if(recompute)phases[4].op='Backward 分块重算 Logits，生成 dZ Chunk，再累计 dH';
+const baseFull=N*x.V*x.d;const baseW=x.V*x.H*x.d;const baseHs=Hs;const basePeak=baseW+baseHs+2*baseFull+stats+target;const peak=Math.max(...phases.map(p=>Object.values(p.c).reduce((a,b)=>a+b,0)));const fwd=2*N*x.H*x.V/tpUsed;const train=(recompute?8:6)*N*x.H*x.V/tpUsed+5*N*x.V/tpUsed;const comm=tpUsed>1?3*ring(N*4,tpUsed)+ring(N*x.H*x.d,tpUsed):0;return{...x,N,tpUsed,vLocal,W,WG,Hs,dH,stats,target,fullL,tile,recompute,desc,phases,peak,basePeak,fwd,train,comm,baseFull,baseW}}
+function render(){const x=build(val());$('Bv').textContent=x.B;$('Sv').textContent=fmtInt(x.S);$('validv').textContent=Math.round(x.valid*100)+'%';$('Hv').textContent=fmtInt(x.H);$('Vv').textContent=fmtInt(x.V);$('TPv').textContent='×'+x.tp;$('TCv').textContent=fmtInt(x.tc);$('VCv').textContent=fmtInt(x.vc);
+const reduction=1-x.peak/x.basePeak;const cards=[['有效 Tokens N',fmtInt(x.N),`B×S×valid`],['每 Rank Forward',flops(x.fwd),`2NHV / TP`],['每 Rank Train',flops(x.train),x.recompute?'含一次 Logits 重算':'Forward + 两个 GEMM backward'],['解析峰值',bytes(x.peak),reduction>0?`较单卡标准少 ${(reduction*100).toFixed(1)}%`:'标准显式路径']];$('metrics').innerHTML=cards.map(a=>`<div class="metric"><div class="k">${a[0]}</div><div class="v">${a[1]}</div><div class="s">${a[2]}</div></div>`).join('');
+$('subtitle').textContent=x.desc;const keys=['weight','wgrad','hidden','logits','dlogits','stats','dhidden','comm'];$('legend').innerHTML=keys.map(k=>`<span><i class="dot" style="background:${colors[k]}"></i>${labels[k]}</span>`).join('');const max=x.peak;$('timeline').innerHTML=x.phases.map(p=>{const total=Object.values(p.c).reduce((a,b)=>a+b,0);const segs=keys.filter(k=>p.c[k]).map(k=>`<div class="seg" title="${labels[k]} ${bytes(p.c[k])}" style="width:${100*p.c[k]/max}%;background:${colors[k]}"></div>`).join('');return`<div class="phase"><div class="phaseName">${p.name}</div><div class="bar ${total===max?'peak':''}">${segs}</div><div class="phaseVal">${bytes(total)}</div></div>`}).join('');
+$('comparison').innerHTML=`<div class="callout"><b>标准路径上界：</b> ${bytes(x.basePeak)}<br><b>当前方案：</b> ${bytes(x.peak)}<br><b>峰值变化：</b> ${reduction>=0?'减少':'增加'} ${Math.abs(reduction*100).toFixed(1)}%</div><div class="formula" style="margin-top:10px">完整单卡 Logits = ${bytes(x.N*x.V*x.d)}\n当前每 Rank W = ${bytes(x.W)}\n当前 Tile/Local Logits = ${bytes(x.strategy==='baseline'||x.strategy==='tp'?x.fullL:x.tile)}\n通信近似/Rank = ${bytes(x.comm)}</div>`;
+let trade=x.desc;if(x.recompute)trade+=` 重计算使 LM Head 主 GEMM 从约 6NHV 增至约 8NHV（+33% 理论主 GEMM FLOPs），但更小 Tile 可能增加 Launch 开销并降低 GEMM 利用率。`;if(x.tpUsed>1)trade+=` TP=${x.tpUsed} 把 W、Logits、dW 约缩小到 1/${x.tpUsed}，但需要标量统计 AllReduce 以及 dH 的归约通信。`;$('tradeoff').innerHTML=`<div class="callout warn">${trade}</div>`;
+$('steps').innerHTML=x.phases.map(p=>{const total=Object.values(p.c).reduce((a,b)=>a+b,0);const live=Object.entries(p.c).filter(a=>a[1]).map(a=>`${labels[a[0]]} ${bytes(a[1])}`).join('<br>');return`<tr><td>${p.name}</td><td>${p.op}</td><td><code>${p.shape}</code></td><td>${flops(p.f)}</td><td>${live}</td><td>${bytes(total)}</td></tr>`}).join('');
+$('formula').textContent=`N = ceil(B × S × valid_ratio) = ${fmtInt(x.N)}\nV_local = ceil(V / TP_used) = ${fmtInt(x.vLocal)}\n\nForward projection FLOPs = 2 × N × H × V / TP = ${flops(x.fwd)} / rank\nStandard train GEMM FLOPs ≈ 6 × N × H × V / TP\nRecompute fused train GEMM FLOPs ≈ 8 × N × H × V / TP\n当前估算（含 O(NV) CE）= ${flops(x.train)} / rank\n\n完整 Logits bytes = N × V × dtype = ${bytes(x.N*x.V*x.d)}\nLocal/Tile Logits bytes = ${bytes(x.strategy==='baseline'||x.strategy==='tp'?x.fullL:x.tile)}\nLM Head local weight bytes = V_local × H × dtype = ${bytes(x.W)}\nH_final bytes = N × H × dtype = ${bytes(x.Hs)}\n\nTP 通信近似采用 ring: 2(TP−1)/TP × payload；这里只给链路字节量级，不等于通信时延。`}
+ids.forEach(id=>$(id).addEventListener('input',render));document.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>{const p=b.dataset.preset;if(p==='tiny'){ $('B').value=1;$('S').value=128;$('H').value=1024;$('V').value=4096;$('TP').value=1;$('TC').value=32;$('VC').value=512}else if(p==='train'){ $('B').value=2;$('S').value=8192;$('H').value=4096;$('V').value=128256;$('TP').value=1;$('TC').value=256;$('VC').value=4096}else{$('B').value=1;$('S').value=131072;$('H').value=4096;$('V').value=128256;$('TP').value=8;$('TC').value=256;$('VC').value=2048;$('strategy').value='tpChunk'}render()});render();
+</script>
+</body>
+</html>

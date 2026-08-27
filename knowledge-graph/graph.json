@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-07-26T15:54:01+08:00",
-  "updated_at": "2026-08-13T11:24:58+08:00",
+  "updated_at": "2026-08-27T10:51:14+08:00",
   "nodes": {
     "Compute-Communication Overlap": {
       "concept": "Compute-Communication Overlap",
@@ -3404,6 +3404,541 @@
         ]
       },
       "group": "memory"
+    },
+    "LM Head": {
+      "concept": "LM Head",
+      "aliases": [
+        "Language Modeling Head",
+        "Vocabulary Projection",
+        "输出词表投影"
+      ],
+      "mastery": 1,
+      "needs_review": false,
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-08-27",
+      "next_review": "2026-08-28",
+      "evidence": [],
+      "recommendations": [
+        {
+          "target": "Stable Softmax",
+          "kind": "prerequisite",
+          "reason": "在线计算logsumexp与数值稳定性的基础",
+          "status": "open"
+        },
+        {
+          "target": "Vocab Parallel Cross Entropy",
+          "kind": "peer",
+          "reason": "比较分布式词表切分与融合分块",
+          "status": "open"
+        },
+        {
+          "target": "LM Head Kernel Profiling",
+          "kind": "downstream",
+          "reason": "将解析显存模型落到真实GPU时间线",
+          "status": "open"
+        }
+      ],
+      "content": {
+        "sections": [
+          {
+            "title": "一句话结论",
+            "type": "text",
+            "body": "LM Head是W_vocab[V,H]对最终隐藏状态X[N,H]的Vocabulary Projection：Z=XW^T得到[N,V] Logits，再接Stable Cross Entropy。它常是大词表、长序列训练的显存热点。"
+          },
+          {
+            "title": "完整前反向数据流",
+            "type": "svg",
+            "body": "<svg viewBox=\"0 0 680 440\" width=\"100%\" role=\"img\" xmlns=\"http://www.w3.org/2000/svg\"><title>LM Head 从隐藏状态到交叉熵的完整路径</title><desc>展示最终隐藏状态经过词表投影生成Logits，再通过稳定Softmax交叉熵产生Loss，反向产生dLogits、dHidden和dWeight。</desc><defs><marker id=\"arrow\" viewBox=\"0 0 10 10\" refX=\"8\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M2 1L8 5L2 9\" fill=\"none\" stroke=\"context-stroke\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></marker></defs><text x=\"40\" y=\"28\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"500\" fill=\"#26215C\">LM Head = Vocabulary projection + Cross Entropy</text><text x=\"40\" y=\"68\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#0C447C\">Forward</text><rect x=\"40\" y=\"86\" width=\"120\" height=\"58\" rx=\"10\" fill=\"#E6F1FB\" stroke=\"#185FA5\" stroke-width=\"0.5\"/><text x=\"100\" y=\"107\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#0C447C\" text-anchor=\"middle\">H_final</text><text x=\"100\" y=\"128\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#185FA5\" text-anchor=\"middle\">[B,S,H] → [N,H]</text><rect x=\"200\" y=\"86\" width=\"120\" height=\"58\" rx=\"10\" fill=\"#F1EFE8\" stroke=\"#5F5E5A\" stroke-width=\"0.5\"/><text x=\"260\" y=\"107\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#2C2C2A\" text-anchor=\"middle\">W_vocab</text><text x=\"260\" y=\"128\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#5F5E5A\" text-anchor=\"middle\">[V,H]</text><rect x=\"360\" y=\"86\" width=\"120\" height=\"58\" rx=\"10\" fill=\"#EEEDFE\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"420\" y=\"107\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#26215C\" text-anchor=\"middle\">Logits Z</text><text x=\"420\" y=\"128\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#534AB7\" text-anchor=\"middle\">[N,V]</text><rect x=\"520\" y=\"86\" width=\"120\" height=\"58\" rx=\"10\" fill=\"#E1F5EE\" stroke=\"#0F6E56\" stroke-width=\"0.5\"/><text x=\"580\" y=\"107\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#04342C\" text-anchor=\"middle\">Cross Entropy</text><text x=\"580\" y=\"128\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#0F6E56\" text-anchor=\"middle\">Loss scalar</text><path d=\"M160 115 L356 115\" fill=\"none\" stroke=\"#185FA5\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><path d=\"M320 115 L356 115\" fill=\"none\" stroke=\"#5F5E5A\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><path d=\"M480 115 L516 115\" fill=\"none\" stroke=\"#534AB7\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><text x=\"40\" y=\"212\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#3C3489\">Backward</text><rect x=\"520\" y=\"230\" width=\"120\" height=\"58\" rx=\"10\" fill=\"#EEEDFE\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"580\" y=\"251\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#26215C\" text-anchor=\"middle\">dZ</text><text x=\"580\" y=\"272\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#534AB7\" text-anchor=\"middle\">[N,V]</text><rect x=\"326\" y=\"230\" width=\"144\" height=\"58\" rx=\"10\" fill=\"#E1F5EE\" stroke=\"#0F6E56\" stroke-width=\"0.5\"/><text x=\"398\" y=\"251\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#04342C\" text-anchor=\"middle\">dX = dZ × W</text><text x=\"398\" y=\"272\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#0F6E56\" text-anchor=\"middle\">[N,H]</text><rect x=\"132\" y=\"230\" width=\"144\" height=\"58\" rx=\"10\" fill=\"#E1F5EE\" stroke=\"#0F6E56\" stroke-width=\"0.5\"/><text x=\"204\" y=\"251\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#04342C\" text-anchor=\"middle\">dW = dZᵀ × X</text><text x=\"204\" y=\"272\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#0F6E56\" text-anchor=\"middle\">[V,H]</text><path d=\"M520 259 L474 259\" fill=\"none\" stroke=\"#534AB7\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><path d=\"M520 271 C450 338 314 330 276 278\" fill=\"none\" stroke=\"#534AB7\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><rect x=\"40\" y=\"338\" width=\"600\" height=\"70\" rx=\"12\" fill=\"#FCEBEB\" stroke=\"#A32D2D\" stroke-width=\"0.5\"/><text x=\"60\" y=\"362\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#791F1F\">显存热点</text><text x=\"60\" y=\"386\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#A32D2D\">Z 和 dZ 都是 [N,V]；V 常为 32K–256K，N 随 Batch×Sequence 增长。</text></svg>"
+          },
+          {
+            "title": "Shape与主公式",
+            "type": "formula",
+            "body": "Forward: Z=XW^T，[N,H]×[H,V]→[N,V]。CE: loss_n=logsumexp(Z_n)−Z[n,y_n]。Backward: dZ=(P−OneHot)/N；dX=dZW；dW=dZ^TX。"
+          },
+          {
+            "title": "FLOPs",
+            "type": "formula",
+            "body": "Forward Projection≈2NHV；dX≈2NHV；dW≈2NHV；标准训练主GEMM≈6NHV。若Forward不保存Logits、Backward重算Projection，保守上界≈8NHV，LM Head子模块主GEMM增加约33.3%。"
+          },
+          {
+            "title": "显存量级",
+            "type": "formula",
+            "body": "完整Logits bytes=N×V×dtype_bytes。B=2,S=8192,N=16384,H=4096,V=128256,BF16时，一份Logits≈3.914GiB，H_final仅128MiB，W_vocab≈0.979GiB。显式Logits与dLogits同时活跃的上界约7.828GiB。"
+          },
+          {
+            "title": "标准生命周期",
+            "type": "svg",
+            "body": "<svg viewBox=\"0 0 680 470\" width=\"100%\" role=\"img\" xmlns=\"http://www.w3.org/2000/svg\"><title>标准 LM Head 前反向的显存生命周期</title><desc>展示隐藏状态、LM Head权重、Logits、Softmax统计、dLogits、dHidden和dWeight在各阶段的存活关系，峰值通常出现在Cross Entropy backward附近。</desc><text x=\"40\" y=\"28\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"500\" fill=\"#26215C\">标准 Linear + Cross Entropy：大 Tensor 生命周期</text><g font-family=\"sans-serif\" font-size=\"11\"><text x=\"40\" y=\"76\" fill=\"#5F5E5A\">H_final</text><text x=\"40\" y=\"116\" fill=\"#5F5E5A\">W_vocab</text><text x=\"40\" y=\"156\" fill=\"#5F5E5A\">Logits</text><text x=\"40\" y=\"196\" fill=\"#5F5E5A\">CE stats</text><text x=\"40\" y=\"236\" fill=\"#5F5E5A\">dLogits</text><text x=\"40\" y=\"276\" fill=\"#5F5E5A\">dHidden</text><text x=\"40\" y=\"316\" fill=\"#5F5E5A\">dWeight</text></g><g fill=\"#F1EFE8\" stroke=\"#D3D1C7\" stroke-width=\"0.5\"><rect x=\"124\" y=\"48\" width=\"82\" height=\"290\" rx=\"8\"/><rect x=\"210\" y=\"48\" width=\"82\" height=\"290\" rx=\"8\"/><rect x=\"296\" y=\"48\" width=\"82\" height=\"290\" rx=\"8\"/><rect x=\"382\" y=\"48\" width=\"82\" height=\"290\" rx=\"8\"/><rect x=\"468\" y=\"48\" width=\"82\" height=\"290\" rx=\"8\"/><rect x=\"554\" y=\"48\" width=\"82\" height=\"290\" rx=\"8\"/></g><g font-family=\"sans-serif\" font-size=\"11\" fill=\"#5F5E5A\" text-anchor=\"middle\"><text x=\"165\" y=\"360\">输入</text><text x=\"251\" y=\"360\">投影</text><text x=\"337\" y=\"360\">CE Fwd</text><text x=\"423\" y=\"360\">CE Bwd</text><text x=\"509\" y=\"360\">Linear Bwd</text><text x=\"595\" y=\"360\">结束</text></g><rect x=\"124\" y=\"60\" width=\"426\" height=\"24\" rx=\"5\" fill=\"#B5D4F4\"/><rect x=\"124\" y=\"100\" width=\"512\" height=\"24\" rx=\"5\" fill=\"#D3D1C7\"/><rect x=\"210\" y=\"140\" width=\"340\" height=\"24\" rx=\"5\" fill=\"#AFA9EC\"/><rect x=\"296\" y=\"180\" width=\"168\" height=\"24\" rx=\"5\" fill=\"#9FE1CB\"/><rect x=\"382\" y=\"220\" width=\"168\" height=\"24\" rx=\"5\" fill=\"#F09595\"/><rect x=\"468\" y=\"260\" width=\"82\" height=\"24\" rx=\"5\" fill=\"#85B7EB\"/><rect x=\"468\" y=\"300\" width=\"168\" height=\"24\" rx=\"5\" fill=\"#FAC775\"/><rect x=\"374\" y=\"390\" width=\"178\" height=\"44\" rx=\"9\" fill=\"#FCEBEB\" stroke=\"#A32D2D\" stroke-width=\"0.5\"/><text x=\"463\" y=\"407\" font-family=\"sans-serif\" font-size=\"12\" font-weight=\"500\" fill=\"#791F1F\" text-anchor=\"middle\">常见峰值区</text><text x=\"463\" y=\"425\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#A32D2D\" text-anchor=\"middle\">Logits 与 dLogits/CE 临时量重叠</text></svg>"
+          },
+          {
+            "title": "Weight Tying",
+            "type": "text",
+            "body": "输入Embedding与LM Head可共享[V,H]参数，从而减少一份参数、梯度和优化器状态；共享参数总梯度=dW_lm_head+dW_embedding，但Weight Tying不消除[N,V]动态Logits。"
+          },
+          {
+            "title": "融合与分块",
+            "type": "svg",
+            "body": "<svg viewBox=\"0 0 680 480\" width=\"100%\" role=\"img\" xmlns=\"http://www.w3.org/2000/svg\"><title>标准 LM Head 与 Fused Chunked Linear Cross Entropy 对比</title><desc>标准路径完整物化Logits和dLogits；融合路径按Token或Vocabulary块计算，保存每Token的max和sum-exp，Backward重算Chunk并累计dHidden和dWeight。</desc><defs><marker id=\"arrow\" viewBox=\"0 0 10 10\" refX=\"8\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M2 1L8 5L2 9\" fill=\"none\" stroke=\"context-stroke\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></marker></defs><text x=\"40\" y=\"28\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"500\" fill=\"#26215C\">完整物化 vs Fused Chunked LM Head</text><text x=\"40\" y=\"68\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#791F1F\">标准路径</text><rect x=\"40\" y=\"86\" width=\"126\" height=\"58\" rx=\"10\" fill=\"#E6F1FB\" stroke=\"#185FA5\" stroke-width=\"0.5\"/><text x=\"103\" y=\"107\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#0C447C\" text-anchor=\"middle\">H [N,H]</text><text x=\"103\" y=\"128\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#185FA5\" text-anchor=\"middle\">× Wᵀ</text><rect x=\"208\" y=\"86\" width=\"150\" height=\"58\" rx=\"10\" fill=\"#FCEBEB\" stroke=\"#A32D2D\" stroke-width=\"0.5\"/><text x=\"283\" y=\"107\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#791F1F\" text-anchor=\"middle\">完整 Logits</text><text x=\"283\" y=\"128\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#A32D2D\" text-anchor=\"middle\">[N,V]</text><rect x=\"400\" y=\"86\" width=\"112\" height=\"58\" rx=\"10\" fill=\"#EEEDFE\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"456\" y=\"107\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#26215C\" text-anchor=\"middle\">CE</text><text x=\"456\" y=\"128\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#534AB7\" text-anchor=\"middle\">保存大中间量</text><rect x=\"554\" y=\"86\" width=\"86\" height=\"58\" rx=\"10\" fill=\"#FCEBEB\" stroke=\"#A32D2D\" stroke-width=\"0.5\"/><text x=\"597\" y=\"107\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#791F1F\" text-anchor=\"middle\">dLogits</text><text x=\"597\" y=\"128\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#A32D2D\" text-anchor=\"middle\">[N,V]</text><path d=\"M166 115 L204 115\" fill=\"none\" stroke=\"#185FA5\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><path d=\"M358 115 L396 115\" fill=\"none\" stroke=\"#A32D2D\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><path d=\"M512 115 L550 115\" fill=\"none\" stroke=\"#534AB7\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><text x=\"40\" y=\"214\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#04342C\">Fused Chunked 路径</text><rect x=\"40\" y=\"232\" width=\"126\" height=\"58\" rx=\"10\" fill=\"#E6F1FB\" stroke=\"#185FA5\" stroke-width=\"0.5\"/><text x=\"103\" y=\"253\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#0C447C\" text-anchor=\"middle\">H [N,H]</text><text x=\"103\" y=\"274\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#185FA5\" text-anchor=\"middle\">× W_chunkᵀ</text><rect x=\"208\" y=\"232\" width=\"150\" height=\"58\" rx=\"10\" fill=\"#E1F5EE\" stroke=\"#0F6E56\" stroke-width=\"0.5\"/><text x=\"283\" y=\"253\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#04342C\" text-anchor=\"middle\">Logits Tile</text><text x=\"283\" y=\"274\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#0F6E56\" text-anchor=\"middle\">[C_t,C_v]</text><rect x=\"400\" y=\"232\" width=\"112\" height=\"58\" rx=\"10\" fill=\"#E1F5EE\" stroke=\"#0F6E56\" stroke-width=\"0.5\"/><text x=\"456\" y=\"253\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#04342C\" text-anchor=\"middle\">Online LSE</text><text x=\"456\" y=\"274\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#0F6E56\" text-anchor=\"middle\">max/sum [N]</text><rect x=\"554\" y=\"232\" width=\"86\" height=\"58\" rx=\"10\" fill=\"#E1F5EE\" stroke=\"#0F6E56\" stroke-width=\"0.5\"/><text x=\"597\" y=\"253\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#04342C\" text-anchor=\"middle\">覆盖 Tile</text><text x=\"597\" y=\"274\" font-family=\"sans-serif\" font-size=\"11\" fill=\"#0F6E56\" text-anchor=\"middle\">无 [N,V]</text><path d=\"M166 261 L204 261\" fill=\"none\" stroke=\"#185FA5\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><path d=\"M358 261 L396 261\" fill=\"none\" stroke=\"#0F6E56\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><path d=\"M512 261 L550 261\" fill=\"none\" stroke=\"#0F6E56\" stroke-width=\"1.5\" marker-end=\"url(#arrow)\"/><rect x=\"92\" y=\"346\" width=\"496\" height=\"92\" rx=\"13\" fill=\"#F1EFE8\" stroke=\"#5F5E5A\" stroke-width=\"0.5\"/><text x=\"112\" y=\"371\" font-family=\"sans-serif\" font-size=\"13\" font-weight=\"500\" fill=\"#2C2C2A\">Backward</text><text x=\"112\" y=\"396\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#5F5E5A\">重算当前 Tile → 恢复 Softmax → 形成 dZ Tile → 累计 dH、dW → 释放</text><text x=\"112\" y=\"420\" font-family=\"sans-serif\" font-size=\"12\" fill=\"#A32D2D\">代价：额外 Projection FLOPs、Chunk Launch、实现复杂度和可能的 GEMM 利用率下降。</text></svg>"
+          },
+          {
+            "title": "优化路线",
+            "type": "text",
+            "body": "优先诊断大Tensor身份；低风险顺序通常是BF16 Logits+FP32 reduction、避免全词表AllGather、Vocab Parallel CE、自定义Fused Linear CE、Token/Vocab双维Chunk、CCE-like片上Tile。普通Python循环可能累积Autograd子图，不能保证只保留一个Chunk。"
+          },
+          {
+            "title": "动态分析器",
+            "type": "text",
+            "body": "在线交互地址：https://psgmessi.github.io/ai-infra-learning/lm-head-memory-explorer.html 。可调整B/S/H/V/dtype/TP/Chunk并观察逐阶段FLOPs、显存和通信解析估算。"
+          },
+          {
+            "title": "正确性与性能验收",
+            "type": "text",
+            "body": "固定Hidden、Weight、Labels、Reduction、Ignore Index、Label Smoothing和并行配置；比较Loss、per-token loss、dHidden、dWeight、Tied Embedding总梯度和Optimizer Step。性能同时看peak allocated/reserved、memory snapshot、Nsight、GEMM TFLOP/s、HBM和Collective暴露时间。"
+          }
+        ]
+      },
+      "group": "architecture"
+    },
+    "Cross Entropy": {
+      "concept": "Cross Entropy",
+      "aliases": [
+        "Softmax Cross Entropy",
+        "交叉熵"
+      ],
+      "mastery": 1,
+      "needs_review": false,
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-08-27",
+      "next_review": "2026-08-28",
+      "evidence": [],
+      "recommendations": [
+        {
+          "target": "Stable Softmax",
+          "kind": "prerequisite",
+          "reason": "理解数值稳定归约",
+          "status": "open"
+        },
+        {
+          "target": "Fused Linear Cross Entropy",
+          "kind": "peer",
+          "reason": "比较不同LM Head显存路径",
+          "status": "open"
+        },
+        {
+          "target": "LM Head Kernel Profiling",
+          "kind": "downstream",
+          "reason": "验证显存和性能模型",
+          "status": "open"
+        }
+      ],
+      "content": {
+        "sections": [
+          {
+            "title": "一句话结论",
+            "type": "text",
+            "body": "对每个Token，loss=logsumexp(logits)−target_logit；稳定实现先减全局最大值。"
+          },
+          {
+            "title": "机制与公式",
+            "type": "formula",
+            "body": "dZ=(softmax(Z)−OneHot(target))/N；每行dZ和为0。"
+          },
+          {
+            "title": "工程边界",
+            "type": "text",
+            "body": "所有词表类别都参与分母，但无需把全部Logits长期写入全局显存。"
+          },
+          {
+            "title": "统一量级",
+            "type": "formula",
+            "body": "默认分析符号：N为有效投影Token数，H为Hidden Size，V为Vocabulary，P为TP。Projection=2NHV FLOPs；完整Logits=N×V×dtype_bytes。"
+          },
+          {
+            "title": "常见误区",
+            "type": "text",
+            "body": "不能只看Python变量生命周期或算子名称判断峰值；需要检查Autograd Saved Tensor、Buffer复用、分布式Gather和Kernel Workspace。"
+          }
+        ]
+      },
+      "group": "core"
+    },
+    "Weight Tying": {
+      "concept": "Weight Tying",
+      "aliases": [
+        "Tied Embedding",
+        "Embedding-LM Head Weight Sharing"
+      ],
+      "mastery": 1,
+      "needs_review": false,
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-08-27",
+      "next_review": "2026-08-28",
+      "evidence": [],
+      "recommendations": [
+        {
+          "target": "Stable Softmax",
+          "kind": "prerequisite",
+          "reason": "理解数值稳定归约",
+          "status": "open"
+        },
+        {
+          "target": "Fused Linear Cross Entropy",
+          "kind": "peer",
+          "reason": "比较不同LM Head显存路径",
+          "status": "open"
+        },
+        {
+          "target": "LM Head Kernel Profiling",
+          "kind": "downstream",
+          "reason": "验证显存和性能模型",
+          "status": "open"
+        }
+      ],
+      "content": {
+        "sections": [
+          {
+            "title": "一句话结论",
+            "type": "text",
+            "body": "输入Embedding与LM Head共享同一个[V,H]参数，减少参数、梯度和优化器状态副本。"
+          },
+          {
+            "title": "机制与公式",
+            "type": "formula",
+            "body": "dW_total=dW_lm_head+dW_embedding；LM Head梯度通常Dense，Embedding Lookup直接梯度通常只命中出现的Token行。"
+          },
+          {
+            "title": "工程边界",
+            "type": "text",
+            "body": "不减少[N,V] Logits动态显存；分布式分片必须保持输入/输出两条路径的一致布局。"
+          },
+          {
+            "title": "统一量级",
+            "type": "formula",
+            "body": "默认分析符号：N为有效投影Token数，H为Hidden Size，V为Vocabulary，P为TP。Projection=2NHV FLOPs；完整Logits=N×V×dtype_bytes。"
+          },
+          {
+            "title": "常见误区",
+            "type": "text",
+            "body": "不能只看Python变量生命周期或算子名称判断峰值；需要检查Autograd Saved Tensor、Buffer复用、分布式Gather和Kernel Workspace。"
+          }
+        ]
+      },
+      "group": "architecture"
+    },
+    "Vocab Parallel Cross Entropy": {
+      "concept": "Vocab Parallel Cross Entropy",
+      "aliases": [
+        "Vocabulary Parallel CE",
+        "Vocab Parallel LM Head"
+      ],
+      "mastery": 1,
+      "needs_review": false,
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-08-27",
+      "next_review": "2026-08-28",
+      "evidence": [],
+      "recommendations": [
+        {
+          "target": "Stable Softmax",
+          "kind": "prerequisite",
+          "reason": "理解数值稳定归约",
+          "status": "open"
+        },
+        {
+          "target": "Fused Linear Cross Entropy",
+          "kind": "peer",
+          "reason": "比较不同LM Head显存路径",
+          "status": "open"
+        },
+        {
+          "target": "LM Head Kernel Profiling",
+          "kind": "downstream",
+          "reason": "验证显存和性能模型",
+          "status": "open"
+        }
+      ],
+      "content": {
+        "sections": [
+          {
+            "title": "一句话结论",
+            "type": "text",
+            "body": "沿Vocabulary维将W和Logits切到TP Ranks，每Rank处理[V/P,H]权重和[N,V/P]本地Logits。"
+          },
+          {
+            "title": "机制与公式",
+            "type": "formula",
+            "body": "Forward依次AllReduce global max、target logit和sum-exp；Backward本地dZ/dW，dX局部贡献需SUM AllReduce或ReduceScatter。"
+          },
+          {
+            "title": "工程边界",
+            "type": "text",
+            "body": "避免AllGather完整词表Logits是显存收益的关键；通信和最慢Rank同步可能成为瓶颈。"
+          },
+          {
+            "title": "统一量级",
+            "type": "formula",
+            "body": "默认分析符号：N为有效投影Token数，H为Hidden Size，V为Vocabulary，P为TP。Projection=2NHV FLOPs；完整Logits=N×V×dtype_bytes。"
+          },
+          {
+            "title": "常见误区",
+            "type": "text",
+            "body": "不能只看Python变量生命周期或算子名称判断峰值；需要检查Autograd Saved Tensor、Buffer复用、分布式Gather和Kernel Workspace。"
+          }
+        ]
+      },
+      "group": "parallelism"
+    },
+    "Fused Linear Cross Entropy": {
+      "concept": "Fused Linear Cross Entropy",
+      "aliases": [
+        "Fused Linear CE",
+        "Chunked Linear Cross Entropy"
+      ],
+      "mastery": 1,
+      "needs_review": false,
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-08-27",
+      "next_review": "2026-08-28",
+      "evidence": [],
+      "recommendations": [
+        {
+          "target": "Stable Softmax",
+          "kind": "prerequisite",
+          "reason": "理解数值稳定归约",
+          "status": "open"
+        },
+        {
+          "target": "Fused Linear Cross Entropy",
+          "kind": "peer",
+          "reason": "比较不同LM Head显存路径",
+          "status": "open"
+        },
+        {
+          "target": "LM Head Kernel Profiling",
+          "kind": "downstream",
+          "reason": "验证显存和性能模型",
+          "status": "open"
+        }
+      ],
+      "content": {
+        "sections": [
+          {
+            "title": "一句话结论",
+            "type": "text",
+            "body": "融合Vocabulary Projection与Cross Entropy，按Token/Vocab Tile计算并即时消费Logits，不在Autograd图中长期保存完整[N,V]。"
+          },
+          {
+            "title": "机制与公式",
+            "type": "formula",
+            "body": "Forward保存per-token max/sum-exp/target；Backward重算Logits Tile，恢复softmax，生成dZ Tile并累计dH和dW。"
+          },
+          {
+            "title": "工程边界",
+            "type": "text",
+            "body": "典型主GEMM上界从6NHV增加到8NHV；Chunk太小会增加Launch并降低Tensor Core利用率。"
+          },
+          {
+            "title": "统一量级",
+            "type": "formula",
+            "body": "默认分析符号：N为有效投影Token数，H为Hidden Size，V为Vocabulary，P为TP。Projection=2NHV FLOPs；完整Logits=N×V×dtype_bytes。"
+          },
+          {
+            "title": "常见误区",
+            "type": "text",
+            "body": "不能只看Python变量生命周期或算子名称判断峰值；需要检查Autograd Saved Tensor、Buffer复用、分布式Gather和Kernel Workspace。"
+          }
+        ]
+      },
+      "group": "kernel"
+    },
+    "Cut Cross Entropy": {
+      "concept": "Cut Cross Entropy",
+      "aliases": [
+        "CCE",
+        "Cut Your Losses"
+      ],
+      "mastery": 1,
+      "needs_review": false,
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-08-27",
+      "next_review": "2026-08-28",
+      "evidence": [],
+      "recommendations": [
+        {
+          "target": "Stable Softmax",
+          "kind": "prerequisite",
+          "reason": "理解数值稳定归约",
+          "status": "open"
+        },
+        {
+          "target": "Fused Linear Cross Entropy",
+          "kind": "peer",
+          "reason": "比较不同LM Head显存路径",
+          "status": "open"
+        },
+        {
+          "target": "LM Head Kernel Profiling",
+          "kind": "downstream",
+          "reason": "验证显存和性能模型",
+          "status": "open"
+        }
+      ],
+      "content": {
+        "sections": [
+          {
+            "title": "一句话结论",
+            "type": "text",
+            "body": "CCE用定制Kernel在Tile/片上存储中完成dot-product与logsumexp，只显式关注target logit，避免全局物化Logit矩阵。"
+          },
+          {
+            "title": "机制与公式",
+            "type": "formula",
+            "body": "Loss保持标准Cross Entropy语义；实现可利用低于数值精度的Softmax梯度项进行过滤以提高Backward吞吐。"
+          },
+          {
+            "title": "工程边界",
+            "type": "text",
+            "body": "公开显存收益是特定模型与实现结果；迁移时需验证dtype、词表、并行、mask和梯度一致性。"
+          },
+          {
+            "title": "统一量级",
+            "type": "formula",
+            "body": "默认分析符号：N为有效投影Token数，H为Hidden Size，V为Vocabulary，P为TP。Projection=2NHV FLOPs；完整Logits=N×V×dtype_bytes。"
+          },
+          {
+            "title": "常见误区",
+            "type": "text",
+            "body": "不能只看Python变量生命周期或算子名称判断峰值；需要检查Autograd Saved Tensor、Buffer复用、分布式Gather和Kernel Workspace。"
+          }
+        ]
+      },
+      "group": "kernel"
+    },
+    "Online Softmax": {
+      "concept": "Online Softmax",
+      "aliases": [
+        "Online LogSumExp",
+        "在线Softmax"
+      ],
+      "mastery": 1,
+      "needs_review": false,
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-08-27",
+      "next_review": "2026-08-28",
+      "evidence": [],
+      "recommendations": [
+        {
+          "target": "Stable Softmax",
+          "kind": "prerequisite",
+          "reason": "理解数值稳定归约",
+          "status": "open"
+        },
+        {
+          "target": "Fused Linear Cross Entropy",
+          "kind": "peer",
+          "reason": "比较不同LM Head显存路径",
+          "status": "open"
+        },
+        {
+          "target": "LM Head Kernel Profiling",
+          "kind": "downstream",
+          "reason": "验证显存和性能模型",
+          "status": "open"
+        }
+      ],
+      "content": {
+        "sections": [
+          {
+            "title": "一句话结论",
+            "type": "text",
+            "body": "Online Softmax以running max和running sum-exp合并Vocabulary Chunks，精确得到全词表logsumexp。"
+          },
+          {
+            "title": "机制与公式",
+            "type": "formula",
+            "body": "m_new=max(m_old,m_chunk)；l_new=l_old×exp(m_old−m_new)+l_chunk×exp(m_chunk−m_new)。"
+          },
+          {
+            "title": "工程边界",
+            "type": "text",
+            "body": "是Vocab Chunk与分布式稳定Softmax的数学基础；Reduction应使用足够精度。"
+          },
+          {
+            "title": "统一量级",
+            "type": "formula",
+            "body": "默认分析符号：N为有效投影Token数，H为Hidden Size，V为Vocabulary，P为TP。Projection=2NHV FLOPs；完整Logits=N×V×dtype_bytes。"
+          },
+          {
+            "title": "常见误区",
+            "type": "text",
+            "body": "不能只看Python变量生命周期或算子名称判断峰值；需要检查Autograd Saved Tensor、Buffer复用、分布式Gather和Kernel Workspace。"
+          }
+        ]
+      },
+      "group": "kernel"
+    },
+    "LM Head Memory": {
+      "concept": "LM Head Memory",
+      "aliases": [
+        "Logits Memory",
+        "LM Head显存"
+      ],
+      "mastery": 1,
+      "needs_review": false,
+      "first_seen": "2026-08-27",
+      "last_seen": "2026-08-27",
+      "next_review": "2026-08-28",
+      "evidence": [],
+      "recommendations": [
+        {
+          "target": "Stable Softmax",
+          "kind": "prerequisite",
+          "reason": "理解数值稳定归约",
+          "status": "open"
+        },
+        {
+          "target": "Fused Linear Cross Entropy",
+          "kind": "peer",
+          "reason": "比较不同LM Head显存路径",
+          "status": "open"
+        },
+        {
+          "target": "LM Head Kernel Profiling",
+          "kind": "downstream",
+          "reason": "验证显存和性能模型",
+          "status": "open"
+        }
+      ],
+      "content": {
+        "sections": [
+          {
+            "title": "一句话结论",
+            "type": "text",
+            "body": "LM Head动态显存核心按N×V增长，而最后层Hidden按N×H增长；当V≫H时Logits可远大于Hidden。"
+          },
+          {
+            "title": "机制与公式",
+            "type": "formula",
+            "body": "Logits bytes=N×V×dtype；W bytes=V×H×param_dtype；标准显式Backward还可能出现同Shape dLogits和CE保存量。"
+          },
+          {
+            "title": "工程边界",
+            "type": "text",
+            "body": "必须区分allocated、reserved、workspace和fragmentation，并通过Memory Snapshot确认真实生命周期。"
+          },
+          {
+            "title": "统一量级",
+            "type": "formula",
+            "body": "默认分析符号：N为有效投影Token数，H为Hidden Size，V为Vocabulary，P为TP。Projection=2NHV FLOPs；完整Logits=N×V×dtype_bytes。"
+          },
+          {
+            "title": "常见误区",
+            "type": "text",
+            "body": "不能只看Python变量生命周期或算子名称判断峰值；需要检查Autograd Saved Tensor、Buffer复用、分布式Gather和Kernel Workspace。"
+          }
+        ]
+      },
+      "group": "memory"
     }
   },
   "edges": [
@@ -4121,6 +4656,61 @@
       "source": "Activation Checkpointing",
       "target": "Backpropagation",
       "type": "component"
+    },
+    {
+      "source": "LM Head",
+      "target": "Cross Entropy",
+      "type": "component"
+    },
+    {
+      "source": "LM Head",
+      "target": "Tensor Parallel",
+      "type": "related"
+    },
+    {
+      "source": "LM Head",
+      "target": "Mixed Precision Training",
+      "type": "related"
+    },
+    {
+      "source": "LM Head",
+      "target": "Backpropagation",
+      "type": "related"
+    },
+    {
+      "source": "Cross Entropy",
+      "target": "LM Head",
+      "type": "component"
+    },
+    {
+      "source": "Weight Tying",
+      "target": "LM Head",
+      "type": "component"
+    },
+    {
+      "source": "Vocab Parallel Cross Entropy",
+      "target": "LM Head",
+      "type": "component"
+    },
+    {
+      "source": "Fused Linear Cross Entropy",
+      "target": "LM Head",
+      "type": "component"
+    },
+    {
+      "source": "Cut Cross Entropy",
+      "target": "LM Head",
+      "type": "component"
+    },
+    {
+      "source": "Online Softmax",
+      "target": "LM Head",
+      "type": "component"
+    },
+    {
+      "source": "LM Head Memory",
+      "target": "LM Head",
+      "type": "component"
     }
   ],
   "lessons": [
@@ -4539,6 +5129,70 @@
       "depth": "D2",
       "question_summary": "反向传播中的关键基础机制。",
       "answer_summary": "Activation Checkpointing只保存区间边界，在Backward时重算Forward中间值，以额外FLOP换更少Saved Activation显存。"
+    },
+    {
+      "id": "L0053",
+      "at": "2026-08-27T10:51:14+08:00",
+      "concept": "LM Head",
+      "depth": "D2",
+      "question_summary": "详细讲解LM Head前反向、shape、FLOPs、显存以及显存优化。",
+      "answer_summary": "LM Head将最终隐藏状态[N,H]投影为全词表Logits[N,V]，训练主GEMM约6NHV FLOPs；完整Logits和dLogits是长序列大词表下的核心显存热点，可通过Vocab TP、在线Softmax、Chunk和Fused Linear CE优化。"
+    },
+    {
+      "id": "L0054",
+      "at": "2026-08-27T10:51:14+08:00",
+      "concept": "Cross Entropy",
+      "depth": "D2",
+      "question_summary": "LM Head训练中的核心机制与显存优化。",
+      "answer_summary": "对每个Token，loss=logsumexp(logits)−target_logit；稳定实现先减全局最大值。"
+    },
+    {
+      "id": "L0055",
+      "at": "2026-08-27T10:51:14+08:00",
+      "concept": "Weight Tying",
+      "depth": "D2",
+      "question_summary": "LM Head训练中的核心机制与显存优化。",
+      "answer_summary": "输入Embedding与LM Head共享同一个[V,H]参数，减少参数、梯度和优化器状态副本。"
+    },
+    {
+      "id": "L0056",
+      "at": "2026-08-27T10:51:14+08:00",
+      "concept": "Vocab Parallel Cross Entropy",
+      "depth": "D2",
+      "question_summary": "LM Head训练中的核心机制与显存优化。",
+      "answer_summary": "沿Vocabulary维将W和Logits切到TP Ranks，每Rank处理[V/P,H]权重和[N,V/P]本地Logits。"
+    },
+    {
+      "id": "L0057",
+      "at": "2026-08-27T10:51:14+08:00",
+      "concept": "Fused Linear Cross Entropy",
+      "depth": "D2",
+      "question_summary": "LM Head训练中的核心机制与显存优化。",
+      "answer_summary": "融合Vocabulary Projection与Cross Entropy，按Token/Vocab Tile计算并即时消费Logits，不在Autograd图中长期保存完整[N,V]。"
+    },
+    {
+      "id": "L0058",
+      "at": "2026-08-27T10:51:14+08:00",
+      "concept": "Cut Cross Entropy",
+      "depth": "D2",
+      "question_summary": "LM Head训练中的核心机制与显存优化。",
+      "answer_summary": "CCE用定制Kernel在Tile/片上存储中完成dot-product与logsumexp，只显式关注target logit，避免全局物化Logit矩阵。"
+    },
+    {
+      "id": "L0059",
+      "at": "2026-08-27T10:51:14+08:00",
+      "concept": "Online Softmax",
+      "depth": "D2",
+      "question_summary": "LM Head训练中的核心机制与显存优化。",
+      "answer_summary": "Online Softmax以running max和running sum-exp合并Vocabulary Chunks，精确得到全词表logsumexp。"
+    },
+    {
+      "id": "L0060",
+      "at": "2026-08-27T10:51:14+08:00",
+      "concept": "LM Head Memory",
+      "depth": "D2",
+      "question_summary": "LM Head训练中的核心机制与显存优化。",
+      "answer_summary": "LM Head动态显存核心按N×V增长，而最后层Hidden按N×H增长；当V≫H时Logits可远大于Hidden。"
     }
   ]
 }

@@ -1,9 +1,9 @@
 # AI Infra 学习摘要
 
-- 更新时间：2026-08-13T11:24:58+08:00
-- 概念数：50
-- 教学事件数：52
-- 关系边数：143
+- 更新时间：2026-08-27T10:51:14+08:00
+- 概念数：58
+- 教学事件数：60
+- 关系边数：154
 
 ## 掌握度总览
 
@@ -24,6 +24,8 @@
 | Computational Graph | L1 | 否 | 2026-08-14 | 计算图, Dynamic Graph |
 | Compute-Communication Overlap | L1 | 否 | 2026-07-27 | 计算通信重叠, overlap, 隐藏延迟 |
 | Context Parallelism | L1 | 否 | 2026-07-30 | CP, 上下文并行 |
+| Cross Entropy | L1 | 否 | 2026-08-28 | Softmax Cross Entropy, 交叉熵 |
+| Cut Cross Entropy | L1 | 否 | 2026-08-28 | CCE, Cut Your Losses |
 | D2H | L1 | 否 | 2026-08-04 | Device-to-Host, GPU到CPU传输 |
 | DDP | L1 | 否 | 2026-07-27 | DistributedDataParallel, 分布式数据并行 |
 | Distributed Training Communication | L1 | 否 | 2026-07-27 | 大模型训练通信方式, 集合通信, Collective Communication |
@@ -31,10 +33,13 @@
 | FP16 | L1 | 否 | 2026-08-03 | Half Precision |
 | FP8 Training | L1 | 否 | 2026-08-03 | FP8混合精度训练, E4M3/E5M2 Training |
 | FSDP | L1 | 否 | 2026-07-27 | Fully Sharded Data Parallel, 完全分片数据并行, ZeRO-3 |
+| Fused Linear Cross Entropy | L1 | 否 | 2026-08-28 | Fused Linear CE, Chunked Linear Cross Entropy |
 | GPUDirect | L1 | 否 | 2026-08-04 | GPUDirect RDMA, GPUDirect Storage |
 | Gradient Accumulation | L1 | 否 | 2026-08-14 | 梯度累加, Micro-batch Accumulation |
 | H2D | L1 | 否 | 2026-08-04 | Host-to-Device, CPU到GPU传输 |
 | LAMB | L1 | 否 | 2026-08-08 | Layer-wise Adaptive Moments optimizer for Batch training, LARS |
+| LM Head | L1 | 否 | 2026-08-28 | Language Modeling Head, Vocabulary Projection, 输出词表投影 |
+| LM Head Memory | L1 | 否 | 2026-08-28 | Logits Memory, LM Head显存 |
 | Lion | L1 | 否 | 2026-08-08 | EvoLved Sign Momentum |
 | Low-Bit Quantization | L1 | 否 | 2026-08-03 | 低比特量化, INT8/INT4 Quantization |
 | Megatron | L1 | 否 | 2026-07-28 | Megatron-LM, Megatron Core |
@@ -45,6 +50,7 @@
 | NCCL | L1 | 否 | 2026-07-28 |  |
 | NUMA | L1 | 否 | 2026-08-04 | Non-Uniform Memory Access |
 | Numerical Precision | L1 | 否 | 2026-08-03 | 数值精度, 大模型精度 |
+| Online Softmax | L1 | 否 | 2026-08-28 | Online LogSumExp, 在线Softmax |
 | OpenAI Triton | L1 | 否 | 2026-07-28 | Triton, triton-lang |
 | Optimizer | L1 | 否 | 2026-08-08 | 优化器, Training Optimizer, 大模型优化器 |
 | Pinned Memory | L1 | 否 | 2026-08-04 | Page-Locked Memory, 锁页内存 |
@@ -58,6 +64,8 @@
 | Tensor Parallel | L1 | 否 | 2026-07-27 | TP, 张量并行 |
 | Unified Memory | L1 | 否 | 2026-08-04 | CUDA Managed Memory, 统一内存 |
 | Virtual Pipeline Parallelism | L1 | 否 | 2026-07-28 | VPP, 虚拟流水线并行, Interleaved Pipeline Parallelism |
+| Vocab Parallel Cross Entropy | L1 | 否 | 2026-08-28 | Vocabulary Parallel CE, Vocab Parallel LM Head |
+| Weight Tying | L1 | 否 | 2026-08-28 | Tied Embedding, Embedding-LM Head Weight Sharing |
 | torch.compile | L1 | 否 | 2026-07-28 |  |
 
 ## 关系
@@ -205,6 +213,17 @@
 - PyTorch Autograd --component--> Backpropagation
 - Gradient Accumulation --component--> Backpropagation
 - Activation Checkpointing --component--> Backpropagation
+- LM Head --component--> Cross Entropy
+- LM Head --related--> Tensor Parallel
+- LM Head --related--> Mixed Precision Training
+- LM Head --related--> Backpropagation
+- Cross Entropy --component--> LM Head
+- Weight Tying --component--> LM Head
+- Vocab Parallel Cross Entropy --component--> LM Head
+- Fused Linear Cross Entropy --component--> LM Head
+- Cut Cross Entropy --component--> LM Head
+- Online Softmax --component--> LM Head
+- LM Head Memory --component--> LM Head
 
 ## 概念详情（每个点包含输出过的信息）
 
@@ -752,6 +771,56 @@ SP通常依附TP，只切LayerNorm/Dropout等非TP区域激活；CP是独立Proc
 适合8K+长上下文、Activation OOM、希望减少Full Recomputation或避免继续扩大TP的场景。要求Attention Kernel支持CP/Ring并具备高速互联和正确Sequence整除/打包。
 - 关联：contrasts→Tensor Parallel; related→Pipeline Parallel; component→Multi-Dimensional Parallelism
 
+### Cross Entropy  (掌握度 L1)
+- 别名：Softmax Cross Entropy, 交叉熵
+
+**一句话结论**
+对每个Token，loss=logsumexp(logits)−target_logit；稳定实现先减全局最大值。
+
+**机制与公式**
+
+```
+dZ=(softmax(Z)−OneHot(target))/N；每行dZ和为0。
+```
+
+**工程边界**
+所有词表类别都参与分母，但无需把全部Logits长期写入全局显存。
+
+**统一量级**
+
+```
+默认分析符号：N为有效投影Token数，H为Hidden Size，V为Vocabulary，P为TP。Projection=2NHV FLOPs；完整Logits=N×V×dtype_bytes。
+```
+
+**常见误区**
+不能只看Python变量生命周期或算子名称判断峰值；需要检查Autograd Saved Tensor、Buffer复用、分布式Gather和Kernel Workspace。
+- 关联：component→LM Head
+
+### Cut Cross Entropy  (掌握度 L1)
+- 别名：CCE, Cut Your Losses
+
+**一句话结论**
+CCE用定制Kernel在Tile/片上存储中完成dot-product与logsumexp，只显式关注target logit，避免全局物化Logit矩阵。
+
+**机制与公式**
+
+```
+Loss保持标准Cross Entropy语义；实现可利用低于数值精度的Softmax梯度项进行过滤以提高Backward吞吐。
+```
+
+**工程边界**
+公开显存收益是特定模型与实现结果；迁移时需验证dtype、词表、并行、mask和梯度一致性。
+
+**统一量级**
+
+```
+默认分析符号：N为有效投影Token数，H为Hidden Size，V为Vocabulary，P为TP。Projection=2NHV FLOPs；完整Logits=N×V×dtype_bytes。
+```
+
+**常见误区**
+不能只看Python变量生命周期或算子名称判断峰值；需要检查Autograd Saved Tensor、Buffer复用、分布式Gather和Kernel Workspace。
+- 关联：component→LM Head
+
 ### D2H  (掌握度 L1)
 - 别名：Device-to-Host, GPU到CPU传输
 
@@ -1099,6 +1168,31 @@ for batch in loader:
 5) 切分粒度随意设：太细通信次数暴涨，太粗临时参数撑爆显存峰值，需按 block 粒度并 profiler 调。
 - 关联：prerequisite→Compute-Communication Overlap; contrasts→DDP; contrasts→Tensor Parallel; contrasts→Pipeline Parallel; implements→AllGather; implements→ReduceScatter
 
+### Fused Linear Cross Entropy  (掌握度 L1)
+- 别名：Fused Linear CE, Chunked Linear Cross Entropy
+
+**一句话结论**
+融合Vocabulary Projection与Cross Entropy，按Token/Vocab Tile计算并即时消费Logits，不在Autograd图中长期保存完整[N,V]。
+
+**机制与公式**
+
+```
+Forward保存per-token max/sum-exp/target；Backward重算Logits Tile，恢复softmax，生成dZ Tile并累计dH和dW。
+```
+
+**工程边界**
+典型主GEMM上界从6NHV增加到8NHV；Chunk太小会增加Launch并降低Tensor Core利用率。
+
+**统一量级**
+
+```
+默认分析符号：N为有效投影Token数，H为Hidden Size，V为Vocabulary，P为TP。Projection=2NHV FLOPs；完整Logits=N×V×dtype_bytes。
+```
+
+**常见误区**
+不能只看Python变量生命周期或算子名称判断峰值；需要检查Autograd Saved Tensor、Buffer复用、分布式Gather和Kernel Workspace。
+- 关联：component→LM Head
+
 ### GPUDirect  (掌握度 L1)
 - 别名：GPUDirect RDMA, GPUDirect Storage
 
@@ -1204,6 +1298,80 @@ r_l=m_hat/(√v_hat+ε)+λθ_l；trust_l=||θ_l||/(||r_l||+ε)；θ_l←θ_l−�
 **共同选型原则**
 切换优化器时必须独立调Learning Rate、Weight Decay、Warmup与内部系数；同时报告Validation Loss vs Tokens、Wall-clock、FLOPs、状态显存和稳定性。
 - 关联：component→Optimizer
+
+### LM Head  (掌握度 L1)
+- 别名：Language Modeling Head, Vocabulary Projection, 输出词表投影
+
+**一句话结论**
+LM Head是W_vocab[V,H]对最终隐藏状态X[N,H]的Vocabulary Projection：Z=XW^T得到[N,V] Logits，再接Stable Cross Entropy。它常是大词表、长序列训练的显存热点。
+
+**完整前反向数据流**
+
+_（此处为内嵌 SVG 图，请在 index.html 中查看）_
+
+**Shape与主公式**
+
+```
+Forward: Z=XW^T，[N,H]×[H,V]→[N,V]。CE: loss_n=logsumexp(Z_n)−Z[n,y_n]。Backward: dZ=(P−OneHot)/N；dX=dZW；dW=dZ^TX。
+```
+
+**FLOPs**
+
+```
+Forward Projection≈2NHV；dX≈2NHV；dW≈2NHV；标准训练主GEMM≈6NHV。若Forward不保存Logits、Backward重算Projection，保守上界≈8NHV，LM Head子模块主GEMM增加约33.3%。
+```
+
+**显存量级**
+
+```
+完整Logits bytes=N×V×dtype_bytes。B=2,S=8192,N=16384,H=4096,V=128256,BF16时，一份Logits≈3.914GiB，H_final仅128MiB，W_vocab≈0.979GiB。显式Logits与dLogits同时活跃的上界约7.828GiB。
+```
+
+**标准生命周期**
+
+_（此处为内嵌 SVG 图，请在 index.html 中查看）_
+
+**Weight Tying**
+输入Embedding与LM Head可共享[V,H]参数，从而减少一份参数、梯度和优化器状态；共享参数总梯度=dW_lm_head+dW_embedding，但Weight Tying不消除[N,V]动态Logits。
+
+**融合与分块**
+
+_（此处为内嵌 SVG 图，请在 index.html 中查看）_
+
+**优化路线**
+优先诊断大Tensor身份；低风险顺序通常是BF16 Logits+FP32 reduction、避免全词表AllGather、Vocab Parallel CE、自定义Fused Linear CE、Token/Vocab双维Chunk、CCE-like片上Tile。普通Python循环可能累积Autograd子图，不能保证只保留一个Chunk。
+
+**动态分析器**
+在线交互地址：https://psgmessi.github.io/ai-infra-learning/lm-head-memory-explorer.html 。可调整B/S/H/V/dtype/TP/Chunk并观察逐阶段FLOPs、显存和通信解析估算。
+
+**正确性与性能验收**
+固定Hidden、Weight、Labels、Reduction、Ignore Index、Label Smoothing和并行配置；比较Loss、per-token loss、dHidden、dWeight、Tied Embedding总梯度和Optimizer Step。性能同时看peak allocated/reserved、memory snapshot、Nsight、GEMM TFLOP/s、HBM和Collective暴露时间。
+- 关联：component→Cross Entropy; related→Tensor Parallel; related→Mixed Precision Training; related→Backpropagation
+
+### LM Head Memory  (掌握度 L1)
+- 别名：Logits Memory, LM Head显存
+
+**一句话结论**
+LM Head动态显存核心按N×V增长，而最后层Hidden按N×H增长；当V≫H时Logits可远大于Hidden。
+
+**机制与公式**
+
+```
+Logits bytes=N×V×dtype；W bytes=V×H×param_dtype；标准显式Backward还可能出现同Shape dLogits和CE保存量。
+```
+
+**工程边界**
+必须区分allocated、reserved、workspace和fragmentation，并通过Memory Snapshot确认真实生命周期。
+
+**统一量级**
+
+```
+默认分析符号：N为有效投影Token数，H为Hidden Size，V为Vocabulary，P为TP。Projection=2NHV FLOPs；完整Logits=N×V×dtype_bytes。
+```
+
+**常见误区**
+不能只看Python变量生命周期或算子名称判断峰值；需要检查Autograd Saved Tensor、Buffer复用、分布式Gather和Kernel Workspace。
+- 关联：component→LM Head
 
 ### Lion  (掌握度 L1)
 - 别名：EvoLved Sign Momentum
@@ -1589,6 +1757,31 @@ FP32=28GB；BF16/FP16=14GB；FP8/INT8=7GB；4bit=3.5GB。经典混合精度Adam�
 **关键误区**
 BF16不是全面比FP16精确；TF32不节省FP32存储；FP8不自动让总训练显存减半；INT4不保证端到端快4倍；FP32累加也不能恢复输入量化丢失的信息。
 - 关联：component→Mixed Precision Training; component→BF16; component→FP16; component→FP8 Training; component→Low-Bit Quantization; related→CUDA; related→PyTorch
+
+### Online Softmax  (掌握度 L1)
+- 别名：Online LogSumExp, 在线Softmax
+
+**一句话结论**
+Online Softmax以running max和running sum-exp合并Vocabulary Chunks，精确得到全词表logsumexp。
+
+**机制与公式**
+
+```
+m_new=max(m_old,m_chunk)；l_new=l_old×exp(m_old−m_new)+l_chunk×exp(m_chunk−m_new)。
+```
+
+**工程边界**
+是Vocab Chunk与分布式稳定Softmax的数学基础；Reduction应使用足够精度。
+
+**统一量级**
+
+```
+默认分析符号：N为有效投影Token数，H为Hidden Size，V为Vocabulary，P为TP。Projection=2NHV FLOPs；完整Logits=N×V×dtype_bytes。
+```
+
+**常见误区**
+不能只看Python变量生命周期或算子名称判断峰值；需要检查Autograd Saved Tensor、Buffer复用、分布式Gather和Kernel Workspace。
+- 关联：component→LM Head
 
 ### OpenAI Triton  (掌握度 L1)
 - 别名：Triton, triton-lang
@@ -2139,6 +2332,56 @@ FSDP/DP：切数据和训练状态；与 VPP 正交，可组成 TP×PP/VPP×DP/F
 VPP = PP 的更细粒度 stage 切分 + interleaved 1F1B。它让每张 GPU 持有 v 个 model chunks，用更短的 chunk 计算填补流水线等待；理想 bubble 缩小 v 倍，但 P2P 通信约增加 v 倍。选择 v 的本质是用更多通信换更少空闲时间，工程上必须测量 bubble 节省是否超过通信与调度开销。
 - 关联：implements→Pipeline Parallel; related→Compute-Communication Overlap; prerequisite→Pipeline Parallel; implements→Megatron
 
+### Vocab Parallel Cross Entropy  (掌握度 L1)
+- 别名：Vocabulary Parallel CE, Vocab Parallel LM Head
+
+**一句话结论**
+沿Vocabulary维将W和Logits切到TP Ranks，每Rank处理[V/P,H]权重和[N,V/P]本地Logits。
+
+**机制与公式**
+
+```
+Forward依次AllReduce global max、target logit和sum-exp；Backward本地dZ/dW，dX局部贡献需SUM AllReduce或ReduceScatter。
+```
+
+**工程边界**
+避免AllGather完整词表Logits是显存收益的关键；通信和最慢Rank同步可能成为瓶颈。
+
+**统一量级**
+
+```
+默认分析符号：N为有效投影Token数，H为Hidden Size，V为Vocabulary，P为TP。Projection=2NHV FLOPs；完整Logits=N×V×dtype_bytes。
+```
+
+**常见误区**
+不能只看Python变量生命周期或算子名称判断峰值；需要检查Autograd Saved Tensor、Buffer复用、分布式Gather和Kernel Workspace。
+- 关联：component→LM Head
+
+### Weight Tying  (掌握度 L1)
+- 别名：Tied Embedding, Embedding-LM Head Weight Sharing
+
+**一句话结论**
+输入Embedding与LM Head共享同一个[V,H]参数，减少参数、梯度和优化器状态副本。
+
+**机制与公式**
+
+```
+dW_total=dW_lm_head+dW_embedding；LM Head梯度通常Dense，Embedding Lookup直接梯度通常只命中出现的Token行。
+```
+
+**工程边界**
+不减少[N,V] Logits动态显存；分布式分片必须保持输入/输出两条路径的一致布局。
+
+**统一量级**
+
+```
+默认分析符号：N为有效投影Token数，H为Hidden Size，V为Vocabulary，P为TP。Projection=2NHV FLOPs；完整Logits=N×V×dtype_bytes。
+```
+
+**常见误区**
+不能只看Python变量生命周期或算子名称判断峰值；需要检查Autograd Saved Tensor、Buffer复用、分布式Gather和Kernel Workspace。
+- 关联：component→LM Head
+
 ### torch.compile  (掌握度 L1)
 - （本节点暂无详细内容，仅有摘要）
 
@@ -2196,3 +2439,11 @@ VPP = PP 的更细粒度 stage 切分 + interleaved 1F1B。它让每张 GPU 持�
 - [L0050] PyTorch Autograd (D2) — PyTorch eager执行时动态构图，叶子参数grad默认累加，中间Tensor梯度临时流过；retain_grad可用于调试。
 - [L0051] Gradient Accumulation (D2) — 梯度累加既指计算图多路径贡献相加，也指多个Micro-batch的parameter.grad跨Backward累加。
 - [L0052] Activation Checkpointing (D2) — Activation Checkpointing只保存区间边界，在Backward时重算Forward中间值，以额外FLOP换更少Saved Activation显存。
+- [L0053] LM Head (D2) — LM Head将最终隐藏状态[N,H]投影为全词表Logits[N,V]，训练主GEMM约6NHV FLOPs；完整Logits和dLogits是长序列大词表下的核心显存热点，可通过Vocab TP、在线Softmax、Chunk和Fused Linear CE优化。
+- [L0054] Cross Entropy (D2) — 对每个Token，loss=logsumexp(logits)−target_logit；稳定实现先减全局最大值。
+- [L0055] Weight Tying (D2) — 输入Embedding与LM Head共享同一个[V,H]参数，减少参数、梯度和优化器状态副本。
+- [L0056] Vocab Parallel Cross Entropy (D2) — 沿Vocabulary维将W和Logits切到TP Ranks，每Rank处理[V/P,H]权重和[N,V/P]本地Logits。
+- [L0057] Fused Linear Cross Entropy (D2) — 融合Vocabulary Projection与Cross Entropy，按Token/Vocab Tile计算并即时消费Logits，不在Autograd图中长期保存完整[N,V]。
+- [L0058] Cut Cross Entropy (D2) — CCE用定制Kernel在Tile/片上存储中完成dot-product与logsumexp，只显式关注target logit，避免全局物化Logit矩阵。
+- [L0059] Online Softmax (D2) — Online Softmax以running max和running sum-exp合并Vocabulary Chunks，精确得到全词表logsumexp。
+- [L0060] LM Head Memory (D2) — LM Head动态显存核心按N×V增长，而最后层Hidden按N×H增长；当V≫H时Logits可远大于Hidden。
