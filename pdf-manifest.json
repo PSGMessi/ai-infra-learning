@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-08-27T10:51:29+08:00",
+  "generatedAt": "2026-08-30T16:46:15+08:00",
   "chapters": [
     {
       "id": "learning-book-guide",
@@ -8,7 +8,7 @@
       "title": "在线笔记本使用教程",
       "file": "pdf/chapter-01-learning-book-guide.pdf",
       "bytes": 471695,
-      "sha256": "4c65deed445f52a40baf2b05344f5d798551ecb7bb6ac771a34019e54aca97b4"
+      "sha256": "639289a141f99476ea4440fc8071561be0b7204bf45530d41696c850afc76e44"
     },
     {
       "id": "compute-communication-overlap",
@@ -16,7 +16,7 @@
       "title": "Overlap 的实现方法和背后的逻辑",
       "file": "pdf/chapter-02-compute-communication-overlap.pdf",
       "bytes": 524561,
-      "sha256": "83e045aec772305b04d9667e4f2a60ad37411b889d69414f5e9f4cccf9201cec"
+      "sha256": "f969807f91d53c091cedca149a433772f95fdc66f2ff4504122efb42600bef89"
     },
     {
       "id": "fsdp",
@@ -24,7 +24,7 @@
       "title": "FSDP：完全分片数据并行",
       "file": "pdf/chapter-03-fsdp.pdf",
       "bytes": 686794,
-      "sha256": "8a7e933941037cd3c5c65936ddb8cb0c35027571bb68e9db3a5ad84e73624362"
+      "sha256": "722c758339447a1c20ccecf259993040d3dcefeec473a37f909ff9213d1e8d86"
     },
     {
       "id": "distributed-training-communication",
@@ -32,7 +32,7 @@
       "title": "大模型训练中的通信方式",
       "file": "pdf/chapter-04-distributed-training-communication.pdf",
       "bytes": 694132,
-      "sha256": "e7eb5219f985ea9fd5342bbb0b2ef2820b42c1a576a1e1c0170d15b38bb20318"
+      "sha256": "95a20166558d6bacc4bf8e627eebf7261dc620ab9ae33e6daa845330f4f9aff3"
     },
     {
       "id": "virtual-pipeline-parallelism",
@@ -40,7 +40,7 @@
       "title": "VPP：虚拟流水线并行与 Interleaved 1F1B",
       "file": "pdf/chapter-05-virtual-pipeline-parallelism.pdf",
       "bytes": 2147606,
-      "sha256": "906e80324f7254bea2bb3e43fa646393a69e009ad3367fb2a7fd9da7368e1321"
+      "sha256": "3d935f64980706a59f039046ee8c1d4d0eee2c327e7729839fb1edbc51238ab9"
     },
     {
       "id": "torch-megatron-cuda-triton",
@@ -48,7 +48,7 @@
       "title": "torch、Megatron、CUDA、Triton：概念、关联与整块知识地图",
       "file": "pdf/chapter-06-torch-megatron-cuda-triton.pdf",
       "bytes": 1467707,
-      "sha256": "22bf2b2411bdef1ef97eb23552e4b9de4f2d941460a72669ad156b116efd9ff3"
+      "sha256": "f9ba0363d4362dd712f3d686f19e5bb4bc62ce35f9be66a4321ff2b401af4d56"
     },
     {
       "id": "cuda-programming-model-memory-hierarchy",
@@ -56,7 +56,7 @@
       "title": "CUDA 编程模型与 GPU 内存层级：从 thread 到 HBM",
       "file": "pdf/chapter-07-cuda-programming-model-memory-hierarchy.pdf",
       "bytes": 1550454,
-      "sha256": "325173575d54e06471b51e7b949e2afcd7da50f18a49b1635c98f53a8db54366"
+      "sha256": "0778ce7e5fd2b726a78af096e7e38b9922299c7d4a8d3df221a415a58c7fd1e8"
     },
     {
       "id": "mixture-of-experts-architecture",
@@ -64,7 +64,7 @@
       "title": "MoE 架构详解：从稀疏路由到 Expert Parallel",
       "file": "pdf/chapter-08-mixture-of-experts-architecture.pdf",
       "bytes": 2164497,
-      "sha256": "786f21e42a56ad91f09a3a89b93dd153e8d857db7dcea340e371486ae380986a"
+      "sha256": "01d22baa4ae6cc0d988dfc9c8da929e815e347f73395a01291454e9aa5cd6b71"
     },
     {
       "id": "llm-parallelism-strategies-complete",
@@ -72,7 +72,7 @@
       "title": "大模型并行策略全解：DP、FSDP、TP、PP/VPP、CP、EP 与多维组合",
       "file": "pdf/chapter-09-llm-parallelism-strategies-complete.pdf",
       "bytes": 1676885,
-      "sha256": "a88764719be6358a8f5537826dd4b70761096e3c9023ab3f3a0191cd6855c7e5"
+      "sha256": "b3dbb88c380c2011945bc4a3317ad139b149e52b6446df170ccc77595bbcbe66"
     },
     {
       "id": "llm-numerical-precision-complete",
@@ -80,7 +80,7 @@
       "title": "大模型数值精度全解：FP32、BF16、FP16、FP8、INT8、INT4 与 FP4",
       "file": "pdf/chapter-10-llm-numerical-precision-complete.pdf",
       "bytes": 1788966,
-      "sha256": "0216f54d820374b44dd371ca40c317fc5a2c1203a28d0c7fe54ea6dd040cbc9f"
+      "sha256": "ea0cc471ddd77ce6103887a31751eeed00b3a0873d0bd12e177fd605dde436f7"
     },
     {
       "id": "h2d-d2h-cpu-gpu-communication",
@@ -88,7 +88,7 @@
       "title": "H2D、D2H 与 CPU–GPU 协同：计算、内存、通信和流水线优化",
       "file": "pdf/chapter-11-h2d-d2h-cpu-gpu-communication.pdf",
       "bytes": 1783087,
-      "sha256": "3ee7d4940ad96856727f83968261ad30ba8b5b378e9c397558d6d42b1df1a79f"
+      "sha256": "634c74ab01bad9c39aef0abdf5322959b58d0ecdc21746379d06269c5abb2e21"
     },
     {
       "id": "llm-training-optimizers-complete",
@@ -96,7 +96,7 @@
       "title": "大模型训练优化器全解：作用、主流算法、显存代价与选型",
       "file": "pdf/chapter-12-llm-training-optimizers-complete.pdf",
       "bytes": 1648931,
-      "sha256": "669a4797524cadee021e9bf3975e7e6dde7529dc3e84211b95eec09e63911fa2"
+      "sha256": "b0caca00048b750bc131832f10174a95539d07164e7dd57d0d37698d18a52167"
     },
     {
       "id": "backpropagation-complete",
@@ -104,20 +104,20 @@
       "title": "反向传播全流程：从 Loss 到每一个参数梯度",
       "file": "pdf/chapter-13-backpropagation-complete.pdf",
       "bytes": 1418588,
-      "sha256": "add651827f88ee5b0ad472f71b7e8eddda67f134ca798f9078f9521757cd52c1"
+      "sha256": "b70a3a71fdfa10e0ddb105e878f54496d14947efee80e7f6d273f9dc2c8e46bd"
     },
     {
       "id": "lm-head-training-memory-optimization",
       "chapterNumber": 14,
       "title": "大模型训练 LM Head 全解：前向、反向、FLOPs、显存与优化",
       "file": "pdf/chapter-14-lm-head-training-memory-optimization.pdf",
-      "bytes": 1620348,
-      "sha256": "426a3f9367e1a21f30e980452e8cf1c9a7e3bf2666c25a5ddc66eb32cf61df6c"
+      "bytes": 1973007,
+      "sha256": "75d30c2484536b0a75af26c2375b7bfedfb70792252a52db71f8df34cddfc3fb"
     }
   ],
   "completeBook": {
     "file": "pdf/ai-infra-learning-book-complete.pdf",
-    "bytes": 8007913,
-    "sha256": "6245b0287247ccea2bdc4ca196b1b64497b519006df8fe6209bfcee581d15330"
+    "bytes": 8244269,
+    "sha256": "9e920a034d63274770238a6f833a6c853346494b6dba979b1e37d50b38321660"
   }
 }

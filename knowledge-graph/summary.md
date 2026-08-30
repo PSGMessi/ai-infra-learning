@@ -1,9 +1,9 @@
 # AI Infra 学习摘要
 
-- 更新时间：2026-08-27T10:51:14+08:00
+- 更新时间：2026-08-30T16:46:41+08:00
 - 概念数：58
-- 教学事件数：60
-- 关系边数：154
+- 教学事件数：63
+- 关系边数：155
 
 ## 掌握度总览
 
@@ -224,6 +224,7 @@
 - Cut Cross Entropy --component--> LM Head
 - Online Softmax --component--> LM Head
 - LM Head Memory --component--> LM Head
+- LM Head --component--> LM Head
 
 ## 概念详情（每个点包含输出过的信息）
 
@@ -792,8 +793,27 @@ dZ=(softmax(Z)−OneHot(target))/N；每行dZ和为0。
 默认分析符号：N为有效投影Token数，H为Hidden Size，V为Vocabulary，P为TP。Projection=2NHV FLOPs；完整Logits=N×V×dtype_bytes。
 ```
 
+**Stable CE 四个公式逐项推导**
+
+```
+对Token n：m_n=max_v Z[n,v]；s_n=Σ_v exp(Z[n,v]−m_n)；logsumexp_n=m_n+log(s_n)；loss_n=logsumexp_n−Z[n,y_n]。代数来源：Σexp(Z)=exp(m)Σexp(Z−m)，所以log(Σexp(Z))=m+log(s)。减最大值使所有指数输入≤0，exp值≤1，而Softmax概率不变。
+```
+
+**Token 0 八步数值图**
+
+_（此处为内嵌 SVG 图，请在 index.html 中查看）_
+
+**Token 0 完整数值链路**
+
+```
+Token0: z0=[1,0,−1,0.5], y0=0。m0=1；shift=[0,−1,−2,−0.5]；exp=[1,0.367879441171,0.135335283237,0.606530659713]；s0=2.109745384121；log(s0)=0.746567269174；LSE=1.746567269174；target_logit=1；loss0=0.746567269174。等价目标概率P0[0]=1/s0=0.473990846254，−log(P0[0])同样为0.746567269174。
+```
+
+**Shape 与显存含义**
+Z[N,V]沿V轴reduce得到m[N]、s[N]、logsumexp[N]；gather目标Logit得到target_logit[N]；per-token loss为[N]，再执行mean/sum reduction。Forward长期核心统计只需m、s、target_logit各[N]，这是Fused/Chunked CE避免完整[N,V] Logits驻留的基础。
+
 **常见误区**
-不能只看Python变量生命周期或算子名称判断峰值；需要检查Autograd Saved Tensor、Buffer复用、分布式Gather和Kernel Workspace。
+s_n不是原始Softmax分母，原始分母=exp(m_n)×s_n；logsumexp不是log(s_n)，必须加回m_n；loss0恰好等于log(s0)只因为本例目标Logit等于最大Logit，一般loss_n=log(s_n)−(target_logit−m_n)。
 - 关联：component→LM Head
 
 ### Cut Cross Entropy  (掌握度 L1)
@@ -1346,7 +1366,29 @@ _（此处为内嵌 SVG 图，请在 index.html 中查看）_
 
 **正确性与性能验收**
 固定Hidden、Weight、Labels、Reduction、Ignore Index、Label Smoothing和并行配置；比较Loss、per-token loss、dHidden、dWeight、Tied Embedding总梯度和Optimizer Step。性能同时看peak allocated/reserved、memory snapshot、Nsight、GEMM TFLOP/s、HBM和Collective暴露时间。
-- 关联：component→Cross Entropy; related→Tensor Parallel; related→Mixed Precision Training; related→Backpropagation
+
+**Stable CE 四个公式逐项推导**
+
+```
+对Token n：m_n=max_v Z[n,v]；s_n=Σ_v exp(Z[n,v]−m_n)；logsumexp_n=m_n+log(s_n)；loss_n=logsumexp_n−Z[n,y_n]。代数来源：Σexp(Z)=exp(m)Σexp(Z−m)，所以log(Σexp(Z))=m+log(s)。减最大值使所有指数输入≤0，exp值≤1，而Softmax概率不变。
+```
+
+**Token 0 八步数值图**
+
+_（此处为内嵌 SVG 图，请在 index.html 中查看）_
+
+**Token 0 完整数值链路**
+
+```
+Token0: z0=[1,0,−1,0.5], y0=0。m0=1；shift=[0,−1,−2,−0.5]；exp=[1,0.367879441171,0.135335283237,0.606530659713]；s0=2.109745384121；log(s0)=0.746567269174；LSE=1.746567269174；target_logit=1；loss0=0.746567269174。等价目标概率P0[0]=1/s0=0.473990846254，−log(P0[0])同样为0.746567269174。
+```
+
+**Shape 与显存含义**
+Z[N,V]沿V轴reduce得到m[N]、s[N]、logsumexp[N]；gather目标Logit得到target_logit[N]；per-token loss为[N]，再执行mean/sum reduction。Forward长期核心统计只需m、s、target_logit各[N]，这是Fused/Chunked CE避免完整[N,V] Logits驻留的基础。
+
+**常见误区**
+s_n不是原始Softmax分母，原始分母=exp(m_n)×s_n；logsumexp不是log(s_n)，必须加回m_n；loss0恰好等于log(s0)只因为本例目标Logit等于最大Logit，一般loss_n=log(s_n)−(target_logit−m_n)。
+- 关联：component→Cross Entropy; related→Tensor Parallel; related→Mixed Precision Training; related→Backpropagation; component→LM Head
 
 ### LM Head Memory  (掌握度 L1)
 - 别名：Logits Memory, LM Head显存
@@ -1779,8 +1821,27 @@ m_new=max(m_old,m_chunk)；l_new=l_old×exp(m_old−m_new)+l_chunk×exp(m_chunk�
 默认分析符号：N为有效投影Token数，H为Hidden Size，V为Vocabulary，P为TP。Projection=2NHV FLOPs；完整Logits=N×V×dtype_bytes。
 ```
 
+**Stable CE 四个公式逐项推导**
+
+```
+对Token n：m_n=max_v Z[n,v]；s_n=Σ_v exp(Z[n,v]−m_n)；logsumexp_n=m_n+log(s_n)；loss_n=logsumexp_n−Z[n,y_n]。代数来源：Σexp(Z)=exp(m)Σexp(Z−m)，所以log(Σexp(Z))=m+log(s)。减最大值使所有指数输入≤0，exp值≤1，而Softmax概率不变。
+```
+
+**Token 0 八步数值图**
+
+_（此处为内嵌 SVG 图，请在 index.html 中查看）_
+
+**Token 0 完整数值链路**
+
+```
+Token0: z0=[1,0,−1,0.5], y0=0。m0=1；shift=[0,−1,−2,−0.5]；exp=[1,0.367879441171,0.135335283237,0.606530659713]；s0=2.109745384121；log(s0)=0.746567269174；LSE=1.746567269174；target_logit=1；loss0=0.746567269174。等价目标概率P0[0]=1/s0=0.473990846254，−log(P0[0])同样为0.746567269174。
+```
+
+**Shape 与显存含义**
+Z[N,V]沿V轴reduce得到m[N]、s[N]、logsumexp[N]；gather目标Logit得到target_logit[N]；per-token loss为[N]，再执行mean/sum reduction。Forward长期核心统计只需m、s、target_logit各[N]，这是Fused/Chunked CE避免完整[N,V] Logits驻留的基础。
+
 **常见误区**
-不能只看Python变量生命周期或算子名称判断峰值；需要检查Autograd Saved Tensor、Buffer复用、分布式Gather和Kernel Workspace。
+s_n不是原始Softmax分母，原始分母=exp(m_n)×s_n；logsumexp不是log(s_n)，必须加回m_n；loss0恰好等于log(s0)只因为本例目标Logit等于最大Logit，一般loss_n=log(s_n)−(target_logit−m_n)。
 - 关联：component→LM Head
 
 ### OpenAI Triton  (掌握度 L1)
@@ -2447,3 +2508,6 @@ dW_total=dW_lm_head+dW_embedding；LM Head梯度通常Dense，Embedding Lookup�
 - [L0058] Cut Cross Entropy (D2) — CCE用定制Kernel在Tile/片上存储中完成dot-product与logsumexp，只显式关注target logit，避免全局物化Logit矩阵。
 - [L0059] Online Softmax (D2) — Online Softmax以running max和running sum-exp合并Vocabulary Chunks，精确得到全词表logsumexp。
 - [L0060] LM Head Memory (D2) — LM Head动态显存核心按N×V增长，而最后层Hidden按N×H增长；当V≫H时Logits可远大于Hidden。
+- [L0061] Cross Entropy (D2) — 完整推导Stable Softmax Cross Entropy，并用Token0验证LSE路径与负对数概率路径完全一致。
+- [L0062] Online Softmax (D2) — 从单行减最大值的Stable CE出发，明确running max/sum-exp的数学来源和每Token统计。
+- [L0063] LM Head (D2) — 补充LM Head Token0的Stable CE完整数值链路及其对Fused/Chunked显存优化的意义。

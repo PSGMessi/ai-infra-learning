@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-07-26T15:54:01+08:00",
-  "updated_at": "2026-08-27T10:51:14+08:00",
+  "updated_at": "2026-08-30T16:46:41+08:00",
   "nodes": {
     "Compute-Communication Overlap": {
       "concept": "Compute-Communication Overlap",
@@ -3415,26 +3415,26 @@
       "mastery": 1,
       "needs_review": false,
       "first_seen": "2026-08-27",
-      "last_seen": "2026-08-27",
+      "last_seen": "2026-08-30",
       "next_review": "2026-08-28",
       "evidence": [],
       "recommendations": [
         {
-          "target": "Stable Softmax",
+          "target": "LogSumExp",
           "kind": "prerequisite",
-          "reason": "在线计算logsumexp与数值稳定性的基础",
+          "reason": "理解稳定Softmax的代数恒等式",
           "status": "open"
         },
         {
-          "target": "Vocab Parallel Cross Entropy",
+          "target": "Online Softmax",
           "kind": "peer",
-          "reason": "比较分布式词表切分与融合分块",
+          "reason": "把整行稳定归约推广到Vocabulary Chunk",
           "status": "open"
         },
         {
-          "target": "LM Head Kernel Profiling",
+          "target": "Fused Linear Cross Entropy",
           "kind": "downstream",
-          "reason": "将解析显存模型落到真实GPU时间线",
+          "reason": "利用每Token统计避免完整Logits驻留",
           "status": "open"
         }
       ],
@@ -3494,6 +3494,31 @@
             "title": "正确性与性能验收",
             "type": "text",
             "body": "固定Hidden、Weight、Labels、Reduction、Ignore Index、Label Smoothing和并行配置；比较Loss、per-token loss、dHidden、dWeight、Tied Embedding总梯度和Optimizer Step。性能同时看peak allocated/reserved、memory snapshot、Nsight、GEMM TFLOP/s、HBM和Collective暴露时间。"
+          },
+          {
+            "title": "Stable CE 四个公式逐项推导",
+            "type": "formula",
+            "body": "对Token n：m_n=max_v Z[n,v]；s_n=Σ_v exp(Z[n,v]−m_n)；logsumexp_n=m_n+log(s_n)；loss_n=logsumexp_n−Z[n,y_n]。代数来源：Σexp(Z)=exp(m)Σexp(Z−m)，所以log(Σexp(Z))=m+log(s)。减最大值使所有指数输入≤0，exp值≤1，而Softmax概率不变。"
+          },
+          {
+            "title": "Token 0 八步数值图",
+            "type": "svg",
+            "body": "<svg viewBox=\"0 0 680 520\" width=\"100%\" role=\"img\" xmlns=\"http://www.w3.org/2000/svg\"><title>Token 0 Stable Softmax Cross Entropy 完整数值流程</title><desc>从四个Logits开始，依次计算最大值、平移Logits、指数、SumExp、LogSumExp、目标Logit和最终Loss。</desc><defs><marker id=\"arrow\" viewBox=\"0 0 10 10\" refX=\"8\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M2 1L8 5L2 9\" fill=\"none\" stroke=\"context-stroke\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></marker></defs><text x=\"40\" y=\"28\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"500\" fill=\"#26215C\">Token 0：Stable Cross Entropy 的 8 个数值步骤</text><g font-family=\"sans-serif\"><rect x=\"40\" y=\"56\" width=\"600\" height=\"52\" rx=\"10\" fill=\"#E6F1FB\" stroke=\"#185FA5\" stroke-width=\"0.5\"/><text x=\"60\" y=\"77\" font-size=\"13\" font-weight=\"500\" fill=\"#0C447C\">1. Logits</text><text x=\"200\" y=\"77\" font-size=\"12\" fill=\"#185FA5\">z0 = [1, 0, −1, 0.5]，target id = 0</text><text x=\"200\" y=\"96\" font-size=\"12\" fill=\"#185FA5\">target logit = z0[0] = 1</text><rect x=\"40\" y=\"126\" width=\"600\" height=\"44\" rx=\"10\" fill=\"#EEEDFE\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"60\" y=\"148\" font-size=\"13\" font-weight=\"500\" fill=\"#26215C\">2. Max</text><text x=\"200\" y=\"148\" font-size=\"12\" fill=\"#534AB7\">m0 = max(1,0,−1,0.5) = 1</text><rect x=\"40\" y=\"188\" width=\"600\" height=\"44\" rx=\"10\" fill=\"#EEEDFE\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"60\" y=\"210\" font-size=\"13\" font-weight=\"500\" fill=\"#26215C\">3. Shift</text><text x=\"200\" y=\"210\" font-size=\"12\" fill=\"#534AB7\">z0−m0 = [0,−1,−2,−0.5]</text><rect x=\"40\" y=\"250\" width=\"600\" height=\"52\" rx=\"10\" fill=\"#E1F5EE\" stroke=\"#0F6E56\" stroke-width=\"0.5\"/><text x=\"60\" y=\"271\" font-size=\"13\" font-weight=\"500\" fill=\"#04342C\">4. Exp</text><text x=\"200\" y=\"271\" font-size=\"12\" fill=\"#0F6E56\">[1, 0.367879, 0.135335, 0.606531]</text><text x=\"200\" y=\"290\" font-size=\"12\" fill=\"#0F6E56\">所有值都 ≤ 1，不会因大正 Logit 上溢</text><rect x=\"40\" y=\"320\" width=\"600\" height=\"44\" rx=\"10\" fill=\"#E1F5EE\" stroke=\"#0F6E56\" stroke-width=\"0.5\"/><text x=\"60\" y=\"342\" font-size=\"13\" font-weight=\"500\" fill=\"#04342C\">5. Sum</text><text x=\"200\" y=\"342\" font-size=\"12\" fill=\"#0F6E56\">s0 = 1+0.367879+0.135335+0.606531 = 2.109745</text><rect x=\"40\" y=\"382\" width=\"600\" height=\"44\" rx=\"10\" fill=\"#F1EFE8\" stroke=\"#5F5E5A\" stroke-width=\"0.5\"/><text x=\"60\" y=\"404\" font-size=\"13\" font-weight=\"500\" fill=\"#2C2C2A\">6. LogSumExp</text><text x=\"200\" y=\"404\" font-size=\"12\" fill=\"#5F5E5A\">1 + log(2.109745) = 1 + 0.746567 = 1.746567</text><rect x=\"40\" y=\"444\" width=\"600\" height=\"52\" rx=\"10\" fill=\"#FCEBEB\" stroke=\"#A32D2D\" stroke-width=\"0.5\"/><text x=\"60\" y=\"465\" font-size=\"13\" font-weight=\"500\" fill=\"#791F1F\">7–8. Loss</text><text x=\"200\" y=\"465\" font-size=\"12\" fill=\"#A32D2D\">loss0 = 1.746567 − target_logit 1 = 0.746567</text><text x=\"200\" y=\"484\" font-size=\"12\" fill=\"#A32D2D\">等价：P(target)=1/2.109745=0.473991，−log(P)=0.746567</text></g></svg>"
+          },
+          {
+            "title": "Token 0 完整数值链路",
+            "type": "formula",
+            "body": "Token0: z0=[1,0,−1,0.5], y0=0。m0=1；shift=[0,−1,−2,−0.5]；exp=[1,0.367879441171,0.135335283237,0.606530659713]；s0=2.109745384121；log(s0)=0.746567269174；LSE=1.746567269174；target_logit=1；loss0=0.746567269174。等价目标概率P0[0]=1/s0=0.473990846254，−log(P0[0])同样为0.746567269174。"
+          },
+          {
+            "title": "Shape 与显存含义",
+            "type": "text",
+            "body": "Z[N,V]沿V轴reduce得到m[N]、s[N]、logsumexp[N]；gather目标Logit得到target_logit[N]；per-token loss为[N]，再执行mean/sum reduction。Forward长期核心统计只需m、s、target_logit各[N]，这是Fused/Chunked CE避免完整[N,V] Logits驻留的基础。"
+          },
+          {
+            "title": "常见误区",
+            "type": "text",
+            "body": "s_n不是原始Softmax分母，原始分母=exp(m_n)×s_n；logsumexp不是log(s_n)，必须加回m_n；loss0恰好等于log(s0)只因为本例目标Logit等于最大Logit，一般loss_n=log(s_n)−(target_logit−m_n)。"
           }
         ]
       },
@@ -3508,26 +3533,26 @@
       "mastery": 1,
       "needs_review": false,
       "first_seen": "2026-08-27",
-      "last_seen": "2026-08-27",
+      "last_seen": "2026-08-30",
       "next_review": "2026-08-28",
       "evidence": [],
       "recommendations": [
         {
-          "target": "Stable Softmax",
+          "target": "LogSumExp",
           "kind": "prerequisite",
-          "reason": "理解数值稳定归约",
+          "reason": "理解稳定Softmax的代数恒等式",
+          "status": "open"
+        },
+        {
+          "target": "Online Softmax",
+          "kind": "peer",
+          "reason": "把整行稳定归约推广到Vocabulary Chunk",
           "status": "open"
         },
         {
           "target": "Fused Linear Cross Entropy",
-          "kind": "peer",
-          "reason": "比较不同LM Head显存路径",
-          "status": "open"
-        },
-        {
-          "target": "LM Head Kernel Profiling",
           "kind": "downstream",
-          "reason": "验证显存和性能模型",
+          "reason": "利用每Token统计避免完整Logits驻留",
           "status": "open"
         }
       ],
@@ -3554,9 +3579,29 @@
             "body": "默认分析符号：N为有效投影Token数，H为Hidden Size，V为Vocabulary，P为TP。Projection=2NHV FLOPs；完整Logits=N×V×dtype_bytes。"
           },
           {
+            "title": "Stable CE 四个公式逐项推导",
+            "type": "formula",
+            "body": "对Token n：m_n=max_v Z[n,v]；s_n=Σ_v exp(Z[n,v]−m_n)；logsumexp_n=m_n+log(s_n)；loss_n=logsumexp_n−Z[n,y_n]。代数来源：Σexp(Z)=exp(m)Σexp(Z−m)，所以log(Σexp(Z))=m+log(s)。减最大值使所有指数输入≤0，exp值≤1，而Softmax概率不变。"
+          },
+          {
+            "title": "Token 0 八步数值图",
+            "type": "svg",
+            "body": "<svg viewBox=\"0 0 680 520\" width=\"100%\" role=\"img\" xmlns=\"http://www.w3.org/2000/svg\"><title>Token 0 Stable Softmax Cross Entropy 完整数值流程</title><desc>从四个Logits开始，依次计算最大值、平移Logits、指数、SumExp、LogSumExp、目标Logit和最终Loss。</desc><defs><marker id=\"arrow\" viewBox=\"0 0 10 10\" refX=\"8\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M2 1L8 5L2 9\" fill=\"none\" stroke=\"context-stroke\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></marker></defs><text x=\"40\" y=\"28\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"500\" fill=\"#26215C\">Token 0：Stable Cross Entropy 的 8 个数值步骤</text><g font-family=\"sans-serif\"><rect x=\"40\" y=\"56\" width=\"600\" height=\"52\" rx=\"10\" fill=\"#E6F1FB\" stroke=\"#185FA5\" stroke-width=\"0.5\"/><text x=\"60\" y=\"77\" font-size=\"13\" font-weight=\"500\" fill=\"#0C447C\">1. Logits</text><text x=\"200\" y=\"77\" font-size=\"12\" fill=\"#185FA5\">z0 = [1, 0, −1, 0.5]，target id = 0</text><text x=\"200\" y=\"96\" font-size=\"12\" fill=\"#185FA5\">target logit = z0[0] = 1</text><rect x=\"40\" y=\"126\" width=\"600\" height=\"44\" rx=\"10\" fill=\"#EEEDFE\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"60\" y=\"148\" font-size=\"13\" font-weight=\"500\" fill=\"#26215C\">2. Max</text><text x=\"200\" y=\"148\" font-size=\"12\" fill=\"#534AB7\">m0 = max(1,0,−1,0.5) = 1</text><rect x=\"40\" y=\"188\" width=\"600\" height=\"44\" rx=\"10\" fill=\"#EEEDFE\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"60\" y=\"210\" font-size=\"13\" font-weight=\"500\" fill=\"#26215C\">3. Shift</text><text x=\"200\" y=\"210\" font-size=\"12\" fill=\"#534AB7\">z0−m0 = [0,−1,−2,−0.5]</text><rect x=\"40\" y=\"250\" width=\"600\" height=\"52\" rx=\"10\" fill=\"#E1F5EE\" stroke=\"#0F6E56\" stroke-width=\"0.5\"/><text x=\"60\" y=\"271\" font-size=\"13\" font-weight=\"500\" fill=\"#04342C\">4. Exp</text><text x=\"200\" y=\"271\" font-size=\"12\" fill=\"#0F6E56\">[1, 0.367879, 0.135335, 0.606531]</text><text x=\"200\" y=\"290\" font-size=\"12\" fill=\"#0F6E56\">所有值都 ≤ 1，不会因大正 Logit 上溢</text><rect x=\"40\" y=\"320\" width=\"600\" height=\"44\" rx=\"10\" fill=\"#E1F5EE\" stroke=\"#0F6E56\" stroke-width=\"0.5\"/><text x=\"60\" y=\"342\" font-size=\"13\" font-weight=\"500\" fill=\"#04342C\">5. Sum</text><text x=\"200\" y=\"342\" font-size=\"12\" fill=\"#0F6E56\">s0 = 1+0.367879+0.135335+0.606531 = 2.109745</text><rect x=\"40\" y=\"382\" width=\"600\" height=\"44\" rx=\"10\" fill=\"#F1EFE8\" stroke=\"#5F5E5A\" stroke-width=\"0.5\"/><text x=\"60\" y=\"404\" font-size=\"13\" font-weight=\"500\" fill=\"#2C2C2A\">6. LogSumExp</text><text x=\"200\" y=\"404\" font-size=\"12\" fill=\"#5F5E5A\">1 + log(2.109745) = 1 + 0.746567 = 1.746567</text><rect x=\"40\" y=\"444\" width=\"600\" height=\"52\" rx=\"10\" fill=\"#FCEBEB\" stroke=\"#A32D2D\" stroke-width=\"0.5\"/><text x=\"60\" y=\"465\" font-size=\"13\" font-weight=\"500\" fill=\"#791F1F\">7–8. Loss</text><text x=\"200\" y=\"465\" font-size=\"12\" fill=\"#A32D2D\">loss0 = 1.746567 − target_logit 1 = 0.746567</text><text x=\"200\" y=\"484\" font-size=\"12\" fill=\"#A32D2D\">等价：P(target)=1/2.109745=0.473991，−log(P)=0.746567</text></g></svg>"
+          },
+          {
+            "title": "Token 0 完整数值链路",
+            "type": "formula",
+            "body": "Token0: z0=[1,0,−1,0.5], y0=0。m0=1；shift=[0,−1,−2,−0.5]；exp=[1,0.367879441171,0.135335283237,0.606530659713]；s0=2.109745384121；log(s0)=0.746567269174；LSE=1.746567269174；target_logit=1；loss0=0.746567269174。等价目标概率P0[0]=1/s0=0.473990846254，−log(P0[0])同样为0.746567269174。"
+          },
+          {
+            "title": "Shape 与显存含义",
+            "type": "text",
+            "body": "Z[N,V]沿V轴reduce得到m[N]、s[N]、logsumexp[N]；gather目标Logit得到target_logit[N]；per-token loss为[N]，再执行mean/sum reduction。Forward长期核心统计只需m、s、target_logit各[N]，这是Fused/Chunked CE避免完整[N,V] Logits驻留的基础。"
+          },
+          {
             "title": "常见误区",
             "type": "text",
-            "body": "不能只看Python变量生命周期或算子名称判断峰值；需要检查Autograd Saved Tensor、Buffer复用、分布式Gather和Kernel Workspace。"
+            "body": "s_n不是原始Softmax分母，原始分母=exp(m_n)×s_n；logsumexp不是log(s_n)，必须加回m_n；loss0恰好等于log(s0)只因为本例目标Logit等于最大Logit，一般loss_n=log(s_n)−(target_logit−m_n)。"
           }
         ]
       },
@@ -3823,26 +3868,26 @@
       "mastery": 1,
       "needs_review": false,
       "first_seen": "2026-08-27",
-      "last_seen": "2026-08-27",
+      "last_seen": "2026-08-30",
       "next_review": "2026-08-28",
       "evidence": [],
       "recommendations": [
         {
-          "target": "Stable Softmax",
+          "target": "LogSumExp",
           "kind": "prerequisite",
-          "reason": "理解数值稳定归约",
+          "reason": "理解稳定Softmax的代数恒等式",
+          "status": "open"
+        },
+        {
+          "target": "Online Softmax",
+          "kind": "peer",
+          "reason": "把整行稳定归约推广到Vocabulary Chunk",
           "status": "open"
         },
         {
           "target": "Fused Linear Cross Entropy",
-          "kind": "peer",
-          "reason": "比较不同LM Head显存路径",
-          "status": "open"
-        },
-        {
-          "target": "LM Head Kernel Profiling",
           "kind": "downstream",
-          "reason": "验证显存和性能模型",
+          "reason": "利用每Token统计避免完整Logits驻留",
           "status": "open"
         }
       ],
@@ -3869,9 +3914,29 @@
             "body": "默认分析符号：N为有效投影Token数，H为Hidden Size，V为Vocabulary，P为TP。Projection=2NHV FLOPs；完整Logits=N×V×dtype_bytes。"
           },
           {
+            "title": "Stable CE 四个公式逐项推导",
+            "type": "formula",
+            "body": "对Token n：m_n=max_v Z[n,v]；s_n=Σ_v exp(Z[n,v]−m_n)；logsumexp_n=m_n+log(s_n)；loss_n=logsumexp_n−Z[n,y_n]。代数来源：Σexp(Z)=exp(m)Σexp(Z−m)，所以log(Σexp(Z))=m+log(s)。减最大值使所有指数输入≤0，exp值≤1，而Softmax概率不变。"
+          },
+          {
+            "title": "Token 0 八步数值图",
+            "type": "svg",
+            "body": "<svg viewBox=\"0 0 680 520\" width=\"100%\" role=\"img\" xmlns=\"http://www.w3.org/2000/svg\"><title>Token 0 Stable Softmax Cross Entropy 完整数值流程</title><desc>从四个Logits开始，依次计算最大值、平移Logits、指数、SumExp、LogSumExp、目标Logit和最终Loss。</desc><defs><marker id=\"arrow\" viewBox=\"0 0 10 10\" refX=\"8\" refY=\"5\" markerWidth=\"6\" markerHeight=\"6\" orient=\"auto-start-reverse\"><path d=\"M2 1L8 5L2 9\" fill=\"none\" stroke=\"context-stroke\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></marker></defs><text x=\"40\" y=\"28\" font-family=\"sans-serif\" font-size=\"15\" font-weight=\"500\" fill=\"#26215C\">Token 0：Stable Cross Entropy 的 8 个数值步骤</text><g font-family=\"sans-serif\"><rect x=\"40\" y=\"56\" width=\"600\" height=\"52\" rx=\"10\" fill=\"#E6F1FB\" stroke=\"#185FA5\" stroke-width=\"0.5\"/><text x=\"60\" y=\"77\" font-size=\"13\" font-weight=\"500\" fill=\"#0C447C\">1. Logits</text><text x=\"200\" y=\"77\" font-size=\"12\" fill=\"#185FA5\">z0 = [1, 0, −1, 0.5]，target id = 0</text><text x=\"200\" y=\"96\" font-size=\"12\" fill=\"#185FA5\">target logit = z0[0] = 1</text><rect x=\"40\" y=\"126\" width=\"600\" height=\"44\" rx=\"10\" fill=\"#EEEDFE\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"60\" y=\"148\" font-size=\"13\" font-weight=\"500\" fill=\"#26215C\">2. Max</text><text x=\"200\" y=\"148\" font-size=\"12\" fill=\"#534AB7\">m0 = max(1,0,−1,0.5) = 1</text><rect x=\"40\" y=\"188\" width=\"600\" height=\"44\" rx=\"10\" fill=\"#EEEDFE\" stroke=\"#534AB7\" stroke-width=\"0.5\"/><text x=\"60\" y=\"210\" font-size=\"13\" font-weight=\"500\" fill=\"#26215C\">3. Shift</text><text x=\"200\" y=\"210\" font-size=\"12\" fill=\"#534AB7\">z0−m0 = [0,−1,−2,−0.5]</text><rect x=\"40\" y=\"250\" width=\"600\" height=\"52\" rx=\"10\" fill=\"#E1F5EE\" stroke=\"#0F6E56\" stroke-width=\"0.5\"/><text x=\"60\" y=\"271\" font-size=\"13\" font-weight=\"500\" fill=\"#04342C\">4. Exp</text><text x=\"200\" y=\"271\" font-size=\"12\" fill=\"#0F6E56\">[1, 0.367879, 0.135335, 0.606531]</text><text x=\"200\" y=\"290\" font-size=\"12\" fill=\"#0F6E56\">所有值都 ≤ 1，不会因大正 Logit 上溢</text><rect x=\"40\" y=\"320\" width=\"600\" height=\"44\" rx=\"10\" fill=\"#E1F5EE\" stroke=\"#0F6E56\" stroke-width=\"0.5\"/><text x=\"60\" y=\"342\" font-size=\"13\" font-weight=\"500\" fill=\"#04342C\">5. Sum</text><text x=\"200\" y=\"342\" font-size=\"12\" fill=\"#0F6E56\">s0 = 1+0.367879+0.135335+0.606531 = 2.109745</text><rect x=\"40\" y=\"382\" width=\"600\" height=\"44\" rx=\"10\" fill=\"#F1EFE8\" stroke=\"#5F5E5A\" stroke-width=\"0.5\"/><text x=\"60\" y=\"404\" font-size=\"13\" font-weight=\"500\" fill=\"#2C2C2A\">6. LogSumExp</text><text x=\"200\" y=\"404\" font-size=\"12\" fill=\"#5F5E5A\">1 + log(2.109745) = 1 + 0.746567 = 1.746567</text><rect x=\"40\" y=\"444\" width=\"600\" height=\"52\" rx=\"10\" fill=\"#FCEBEB\" stroke=\"#A32D2D\" stroke-width=\"0.5\"/><text x=\"60\" y=\"465\" font-size=\"13\" font-weight=\"500\" fill=\"#791F1F\">7–8. Loss</text><text x=\"200\" y=\"465\" font-size=\"12\" fill=\"#A32D2D\">loss0 = 1.746567 − target_logit 1 = 0.746567</text><text x=\"200\" y=\"484\" font-size=\"12\" fill=\"#A32D2D\">等价：P(target)=1/2.109745=0.473991，−log(P)=0.746567</text></g></svg>"
+          },
+          {
+            "title": "Token 0 完整数值链路",
+            "type": "formula",
+            "body": "Token0: z0=[1,0,−1,0.5], y0=0。m0=1；shift=[0,−1,−2,−0.5]；exp=[1,0.367879441171,0.135335283237,0.606530659713]；s0=2.109745384121；log(s0)=0.746567269174；LSE=1.746567269174；target_logit=1；loss0=0.746567269174。等价目标概率P0[0]=1/s0=0.473990846254，−log(P0[0])同样为0.746567269174。"
+          },
+          {
+            "title": "Shape 与显存含义",
+            "type": "text",
+            "body": "Z[N,V]沿V轴reduce得到m[N]、s[N]、logsumexp[N]；gather目标Logit得到target_logit[N]；per-token loss为[N]，再执行mean/sum reduction。Forward长期核心统计只需m、s、target_logit各[N]，这是Fused/Chunked CE避免完整[N,V] Logits驻留的基础。"
+          },
+          {
             "title": "常见误区",
             "type": "text",
-            "body": "不能只看Python变量生命周期或算子名称判断峰值；需要检查Autograd Saved Tensor、Buffer复用、分布式Gather和Kernel Workspace。"
+            "body": "s_n不是原始Softmax分母，原始分母=exp(m_n)×s_n；logsumexp不是log(s_n)，必须加回m_n；loss0恰好等于log(s0)只因为本例目标Logit等于最大Logit，一般loss_n=log(s_n)−(target_logit−m_n)。"
           }
         ]
       },
@@ -4711,6 +4776,11 @@
       "source": "LM Head Memory",
       "target": "LM Head",
       "type": "component"
+    },
+    {
+      "source": "LM Head",
+      "target": "LM Head",
+      "type": "component"
     }
   ],
   "lessons": [
@@ -5193,6 +5263,30 @@
       "depth": "D2",
       "question_summary": "LM Head训练中的核心机制与显存优化。",
       "answer_summary": "LM Head动态显存核心按N×V增长，而最后层Hidden按N×H增长；当V≫H时Logits可远大于Hidden。"
+    },
+    {
+      "id": "L0061",
+      "at": "2026-08-30T16:46:41+08:00",
+      "concept": "Cross Entropy",
+      "depth": "D2",
+      "question_summary": "深入推导 Stable Softmax Cross Entropy 四个公式并逐步计算 Token 0 的 loss。",
+      "answer_summary": "完整推导Stable Softmax Cross Entropy，并用Token0验证LSE路径与负对数概率路径完全一致。"
+    },
+    {
+      "id": "L0062",
+      "at": "2026-08-30T16:46:41+08:00",
+      "concept": "Online Softmax",
+      "depth": "D2",
+      "question_summary": "深入推导 Stable Softmax Cross Entropy 四个公式并逐步计算 Token 0 的 loss。",
+      "answer_summary": "从单行减最大值的Stable CE出发，明确running max/sum-exp的数学来源和每Token统计。"
+    },
+    {
+      "id": "L0063",
+      "at": "2026-08-30T16:46:41+08:00",
+      "concept": "LM Head",
+      "depth": "D2",
+      "question_summary": "深入推导 Stable Softmax Cross Entropy 四个公式并逐步计算 Token 0 的 loss。",
+      "answer_summary": "补充LM Head Token0的Stable CE完整数值链路及其对Fused/Chunked显存优化的意义。"
     }
   ]
 }
