@@ -1,8 +1,8 @@
 # AI Infra 学习摘要
 
-- 更新时间：2026-11-03T16:55:23+08:00
+- 更新时间：2026-11-04T15:30:30+08:00
 - 概念数：59
-- 教学事件数：64
+- 教学事件数：65
 - 关系边数：158
 
 ## 掌握度总览
@@ -1017,17 +1017,49 @@ O[t,h]   = Σ_{s∈S_t} A[t,h,s] × V[s,h]
 
 所以稀疏结果一般不等于 Dense 结果：不只是把 Dense 概率中的小项清零，而是删掉一批项后重新归一化。即使保存大部分 Dense 概率质量，输出也有误差，尤其当被漏掉的 Value 很大或携带关键事实时。训练用于适应这种改变，不是证明两种 Attention 数学等价。
 
-**7. 与 MLA 的关系：压缩存储和选择访问是两件事**
-MLA 用压缩 KV latent 表示历史 Token；DSA 决定当前 Query 读哪些 Token 的 latent。前者主要改变 KV 表示/缓存成本，后者改变访问集合。
+**7. 总览：表示共享与位置选择正交**
+**一句话：MQA/GQA 决定每个历史 Token 存几组 K/V；MLA 决定怎样用共享的低秩 latent 表示历史并保留每头差异；DSA 决定当前 Query 读哪些历史 Token。**不能把 DSA 报告所说“MLA 的 MQA 计算模式”误认成“整个模型变成标准 MQA”。
 
-DSA 原始报告在 MLA 的 MQA 计算模式下实现：被选 KV latent 能在同一 Query 的多个 Query Heads 间复用。MLA 的权重吸收把部分投影移到 Query/输出侧，使稀疏核心可以操作共享 latent；这并不意味着主头输出完全相同。
+**7.1 MQA/GQA/MHA：头映射与缓存形状**
 
-注意两层区别：
+```
+H_q=8,d=128,B=1,S=4096,BF16。MHA Q:[B,S,8,128]、K/V各[B,S,8,128]；GQA-2 K/V各[B,S,2,128]，Q组号[0,0,0,0,1,1,1,1]；MQA K/V各[B,S,1,128]。KV_cache_bytes=B×S×2×H_kv×d×bytes。MQA/GQA每头Q独立、分数/Softmax独立；共享KV不减少主Attention的S²边数。
+```
 
-- 数学教学用普通 Q/K/V 表示 sparse attention，便于推导。
-- 生产 MLA 的 absorbed/unabsorbed 路径维度和 FLOPs 不同，不能直接把普通 MHA 的 d_qk/d_v 代入宣称是精确 MLA FLOPs。
+**7.1 MQA/GQA/MLA 与 DSA 两根优化轴**
 
-同样，**只读 k 个 KV，不等于只需要缓存 k 个历史 Token**。下一 Query 可能选择不同历史位置，通常仍需保留整个历史的 KV latent 和额外 Indexer Key。DSA 减少本次读算集合，不自动构成全局 KV 淘汰算法。
+_（此处为内嵌 SVG 图，请在 index.html 中查看）_
+
+**7.2 MLA：潜变量及解耦RoPE**
+
+```
+c_s=W_DKV x_s:[d_c]；kR_s:[d_r]；kC_s,h=W_UK,h c_s；v_s,h=W_UV,h c_s；score=(qC_h·kC_s,h+qR_h·kR_s)×scale。吸收恒等式：qC_h·(W_UK,h c_s)=(W_UK,h^T qC_h)·c_s，Σ_s a_s(W_UV,h c_s)=W_UV,h(Σ_s a_s c_s)。各头概率仍独立。MLA缓存=B×S×(d_c+d_r)×bytes；MQA decode指共享latent的吸收式计算，不等同标准MQA全头共用完整K/V。
+```
+
+**7.3 统一数值：缓存与DSA读取**
+
+```
+单层BF16，B=1,S=4096,H_q=8,G=2,d=128,MLA d_c=512,d_r=64；MHA=16MiB、GQA=4MiB、MQA=2MiB、MLA=4.5MiB。一次Query选k=2048的理想读取下界分别是8、2、1、2.25MiB；未包含Index Key/scale/通信/重读。两头共享c0=[1,0],c1=[0,1]，吸收后qAbs0=[2,0],qAbs1=[1,0]；各自Softmax([2,0])=[.880797,.119203]与Softmax([1,0])=[.731059,.268941]。
+```
+
+**7.4 前反向与工程边界**
+MQA/GQA组内各Q头的dK/dV需要累加；MLA恢复矩阵及c_s仍要反向，prefill可能物化展开K/V；DSA共享Top-k位置但逐头主分数不同。推理KV cache节省不是训练峰值或端到端加速；DSA不删除未选的历史缓存。选型须分别测Indexer/Top-k、实际Tile、KV访存、dK/dV归约、TP/CP通信与allocated/reserved峰值。
+
+**7.4 可运行缓存计算**
+
+```
+# 最小形状/缓存检查：教学口径，非真实 DSA Kernel
+B, S, Hq, G, d, dc, dr, itemsize = 1, 4096, 8, 2, 128, 512, 64, 2
+assert Hq % G == 0
+assert [h // (Hq // G) for h in range(Hq)] == [0,0,0,0,1,1,1,1]
+cache_mib = {
+    "MHA": B*S*2*Hq*d*itemsize / 2**20,
+    "GQA": B*S*2*G*d*itemsize / 2**20,
+    "MQA": B*S*2*d*itemsize / 2**20,
+    "MLA": B*S*(dc+dr)*itemsize / 2**20,
+}
+print(cache_mib)  # MHA=16, GQA=4, MQA=2, MLA=4.5 MiB
+```
 
 **8. 一个可手算的完整例子**
 只展示最后一个 Query：B=1，S=4，t=3，允许看位置0、1、2、3；k=2。Indexer 有2个头，每头维度2。以下向量视为已完成各自投影/位置处理后的值，省略量化。
@@ -3045,3 +3077,4 @@ dW_total=dW_lm_head+dW_embedding；LM Head梯度通常Dense，Embedding Lookup�
 - [L0062] Online Softmax (D2) — 从单行减最大值的Stable CE出发，明确running max/sum-exp的数学来源和每Token统计。
 - [L0063] LM Head (D2) — 补充LM Head Token0的Stable CE完整数值链路及其对Fused/Chunked显存优化的意义。
 - [L0064] DeepSeek Sparse Attention (D2) — 核心结论：DSA是“学习检索 + 稀疏主注意力 + 分离训练信号 + 专门内核”的组合，不是简单Mask技巧；主注意力省了交互，但Indexer、索引存储、KV缓存、反向归约与分布式通信仍需入账。
+- [L0065] DeepSeek Sparse Attention (D2) — MQA/GQA共享KV头，MLA共享潜变量且逐头恢复，DSA减少当前Query访问位置；附头映射、吸收公式、缓存量、反向边界。

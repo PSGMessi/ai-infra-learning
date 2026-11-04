@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-03T16:55:09+08:00",
+  "generatedAt": "2026-11-04T15:30:40+08:00",
   "chapters": [
     {
       "id": "learning-book-guide",
@@ -8,7 +8,7 @@
       "title": "在线笔记本使用教程",
       "file": "pdf/chapter-01-learning-book-guide.pdf",
       "bytes": 471475,
-      "sha256": "e9a738dc51a5d184394a3b2aa5f9fb60b9400ee41a178419ee5c4f7716478147"
+      "sha256": "55f7f1ddff85b6d49c2d105b6054a77431b3949fa75369a4669682d141af4a04"
     },
     {
       "id": "compute-communication-overlap",
@@ -16,7 +16,7 @@
       "title": "Overlap 的实现方法和背后的逻辑",
       "file": "pdf/chapter-02-compute-communication-overlap.pdf",
       "bytes": 524225,
-      "sha256": "0fa5f4a0449881341aab231c8da8cf9b16e3319cd1d9b3c68070a535c5d97789"
+      "sha256": "7586698c96b88840db4d6e708feae678c566f0e11c8c84c2195a99ef08f1b337"
     },
     {
       "id": "fsdp",
@@ -24,7 +24,7 @@
       "title": "FSDP：完全分片数据并行",
       "file": "pdf/chapter-03-fsdp.pdf",
       "bytes": 686377,
-      "sha256": "4db8f42474281e585a33f4088c1b2152a441d62df088080d621d8e8df2a08b11"
+      "sha256": "c1a3426720ab7802cf0f42c7ea9633d8d94ab5ce0786ebe7ff176569fb2940a8"
     },
     {
       "id": "distributed-training-communication",
@@ -32,7 +32,7 @@
       "title": "大模型训练中的通信方式",
       "file": "pdf/chapter-04-distributed-training-communication.pdf",
       "bytes": 693654,
-      "sha256": "5367a25c6c8abea4ef0378076afec534ae551b9650053018f6fd75ab5d229478"
+      "sha256": "ac69ee77725e97feaa33eb9d49ad4f90d5838762ab2760c4facdcd49b45f36c2"
     },
     {
       "id": "virtual-pipeline-parallelism",
@@ -40,7 +40,7 @@
       "title": "VPP：虚拟流水线并行与 Interleaved 1F1B",
       "file": "pdf/chapter-05-virtual-pipeline-parallelism.pdf",
       "bytes": 2146374,
-      "sha256": "40cc8755629505d12539536b71d4a1175c5bdde9503cf4874ad30f0bc2484c9e"
+      "sha256": "7832e21874f085bf67c81f1f8e9565450246cd90e715d1b95438ac26e9efc1d6"
     },
     {
       "id": "torch-megatron-cuda-triton",
@@ -48,7 +48,7 @@
       "title": "torch、Megatron、CUDA、Triton：概念、关联与整块知识地图",
       "file": "pdf/chapter-06-torch-megatron-cuda-triton.pdf",
       "bytes": 1466555,
-      "sha256": "a5439ce576d32082f4ec25e2508c15fab8b7f086df0bb0abf3096f667ac99f75"
+      "sha256": "228d0488890c066eedc8018b0626d5cbe7191e8b024124623f3cb09e0e019867"
     },
     {
       "id": "cuda-programming-model-memory-hierarchy",
@@ -56,7 +56,7 @@
       "title": "CUDA 编程模型与 GPU 内存层级：从 thread 到 HBM",
       "file": "pdf/chapter-07-cuda-programming-model-memory-hierarchy.pdf",
       "bytes": 1549504,
-      "sha256": "948a7a87910547151f8536b06f866630ef149ab67537f0467203db314a90ecfc"
+      "sha256": "6be755d6ed1b1d840c4504124d5c987e4e5bbc8c24250afe23f15830322346c4"
     },
     {
       "id": "mixture-of-experts-architecture",
@@ -64,7 +64,7 @@
       "title": "MoE 架构详解：从稀疏路由到 Expert Parallel",
       "file": "pdf/chapter-08-mixture-of-experts-architecture.pdf",
       "bytes": 2163200,
-      "sha256": "b6b63be32262fbb1b22a80d7bf916d43339e4f08c278872191e302654f9794b6"
+      "sha256": "f1292cbc93434fa63db32c1d8014458a639d2ed49bf46138149e9664acca8a41"
     },
     {
       "id": "llm-parallelism-strategies-complete",
@@ -72,7 +72,7 @@
       "title": "大模型并行策略全解：DP、FSDP、TP、PP/VPP、CP、EP 与多维组合",
       "file": "pdf/chapter-09-llm-parallelism-strategies-complete.pdf",
       "bytes": 1675766,
-      "sha256": "e39948be3e796a7e12f1287ae74e071610f10dbd2ec0d8db8ac3da15ec101cee"
+      "sha256": "f8565bc4d268a3ede615e6b215c256da4bca4b6e793017e6e6af7b81dac91600"
     },
     {
       "id": "llm-numerical-precision-complete",
@@ -80,7 +80,7 @@
       "title": "大模型数值精度全解：FP32、BF16、FP16、FP8、INT8、INT4 与 FP4",
       "file": "pdf/chapter-10-llm-numerical-precision-complete.pdf",
       "bytes": 1787955,
-      "sha256": "6c3578204cb2dcc7d60c35e93f115a79764c85dff924c1e92f35291d96fbc266"
+      "sha256": "248a32b9b6166e6b7e7c25012de73eed6a405dcfbb9f6bacb09e65a1ecfe2212"
     },
     {
       "id": "h2d-d2h-cpu-gpu-communication",
@@ -88,7 +88,7 @@
       "title": "H2D、D2H 与 CPU–GPU 协同：计算、内存、通信和流水线优化",
       "file": "pdf/chapter-11-h2d-d2h-cpu-gpu-communication.pdf",
       "bytes": 1782076,
-      "sha256": "80bce8d87483aa84d7dfdcf14cbfaf24fddbd91b389120aaf35cd4198544c983"
+      "sha256": "aeb61adc9115454f65efd697cbbbf6fde2d691d4e3232ee3ba22f354a2a60849"
     },
     {
       "id": "llm-training-optimizers-complete",
@@ -96,7 +96,7 @@
       "title": "大模型训练优化器全解：作用、主流算法、显存代价与选型",
       "file": "pdf/chapter-12-llm-training-optimizers-complete.pdf",
       "bytes": 1647951,
-      "sha256": "074f460e3c8dc96e1024715ac355910c44a601b6904830c7cc93c589a0bfe4b6"
+      "sha256": "fbeb0bb33606840a9b859dad46f41bc2899b7dbe72bd905fa9c00691985c2ea5"
     },
     {
       "id": "backpropagation-complete",
@@ -104,7 +104,7 @@
       "title": "反向传播全流程：从 Loss 到每一个参数梯度",
       "file": "pdf/chapter-13-backpropagation-complete.pdf",
       "bytes": 1417825,
-      "sha256": "80fe867787461cecbb2862311606a31408bf1f1cefb1b4307ef58bd1f079e980"
+      "sha256": "9dc82047c840afcb9411c723b416148f8fd1f3a078403ebce2a3e6050880ae18"
     },
     {
       "id": "lm-head-training-memory-optimization",
@@ -112,20 +112,20 @@
       "title": "大模型训练 LM Head 全解：前向、反向、FLOPs、显存与优化",
       "file": "pdf/chapter-14-lm-head-training-memory-optimization.pdf",
       "bytes": 1971957,
-      "sha256": "34de69003bd493ce3b2d3f21a59dbf3822a85496ca6d96bff7168151ec73b12a"
+      "sha256": "4c70388dd5d0ad5ea21c3ab375e2ed5feb22fe2d4141d330a33bf865628106e0"
     },
     {
       "id": "deepseek-sparse-attention-training",
       "chapterNumber": 15,
       "title": "DSA：从 Lightning Indexer 到稀疏 Attention 训练",
       "file": "pdf/chapter-15-deepseek-sparse-attention-training.pdf",
-      "bytes": 1279420,
-      "sha256": "e6ca4c9db0de0124818eb55e844156ee06045417510a6b67fedc1faf308370bb"
+      "bytes": 1545976,
+      "sha256": "e162988bbfb6837d742a4fa41d9e8a932dab2c32167841468cc1e645183b8766"
     }
   ],
   "completeBook": {
     "file": "pdf/ai-infra-learning-book-complete.pdf",
-    "bytes": 8576627,
-    "sha256": "23e905a2933f56274454b138b9af91e4349b5e45a692b7bedb4f3065e00bbe45"
+    "bytes": 8753927,
+    "sha256": "d5fa4ca3e00cd1fb9a51f528aa527aceb7d1f3b46de49d973d2775df30acdc65"
   }
 }

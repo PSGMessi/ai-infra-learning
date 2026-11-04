@@ -1,7 +1,7 @@
 {
   "version": 1,
   "created_at": "2026-07-26T15:54:01+08:00",
-  "updated_at": "2026-11-03T16:55:23+08:00",
+  "updated_at": "2026-11-04T15:30:30+08:00",
   "nodes": {
     "Compute-Communication Overlap": {
       "concept": "Compute-Communication Overlap",
@@ -4013,10 +4013,29 @@
       "mastery": 1,
       "needs_review": false,
       "first_seen": "2026-11-03",
-      "last_seen": "2026-11-03",
+      "last_seen": "2026-11-04",
       "next_review": "2026-11-04",
       "evidence": [],
-      "recommendations": [],
+      "recommendations": [
+        {
+          "target": "MLA 低秩潜变量与权重吸收",
+          "kind": "prerequisite",
+          "reason": "理解共享缓存仍保持逐头计算",
+          "status": "open"
+        },
+        {
+          "target": "GQA 与 MQA",
+          "kind": "peer",
+          "reason": "比较KV头共享与低秩缓存",
+          "status": "open"
+        },
+        {
+          "target": "DSA 稀疏反向与CP",
+          "kind": "downstream",
+          "reason": "优化跨Rank选择与梯度归约",
+          "status": "open"
+        }
+      ],
       "content": {
         "sections": [
           {
@@ -4105,9 +4124,39 @@
             "body": "非选中位置在这次主 Attention 中为0。分母也只在 S_t 内计算。\n\n所以稀疏结果一般不等于 Dense 结果：不只是把 Dense 概率中的小项清零，而是删掉一批项后重新归一化。即使保存大部分 Dense 概率质量，输出也有误差，尤其当被漏掉的 Value 很大或携带关键事实时。训练用于适应这种改变，不是证明两种 Attention 数学等价。"
           },
           {
-            "title": "7. 与 MLA 的关系：压缩存储和选择访问是两件事",
+            "title": "7. 总览：表示共享与位置选择正交",
             "type": "text",
-            "body": "MLA 用压缩 KV latent 表示历史 Token；DSA 决定当前 Query 读哪些 Token 的 latent。前者主要改变 KV 表示/缓存成本，后者改变访问集合。\n\nDSA 原始报告在 MLA 的 MQA 计算模式下实现：被选 KV latent 能在同一 Query 的多个 Query Heads 间复用。MLA 的权重吸收把部分投影移到 Query/输出侧，使稀疏核心可以操作共享 latent；这并不意味着主头输出完全相同。\n\n注意两层区别：\n\n- 数学教学用普通 Q/K/V 表示 sparse attention，便于推导。\n- 生产 MLA 的 absorbed/unabsorbed 路径维度和 FLOPs 不同，不能直接把普通 MHA 的 d_qk/d_v 代入宣称是精确 MLA FLOPs。\n\n同样，**只读 k 个 KV，不等于只需要缓存 k 个历史 Token**。下一 Query 可能选择不同历史位置，通常仍需保留整个历史的 KV latent 和额外 Indexer Key。DSA 减少本次读算集合，不自动构成全局 KV 淘汰算法。"
+            "body": "**一句话：MQA/GQA 决定每个历史 Token 存几组 K/V；MLA 决定怎样用共享的低秩 latent 表示历史并保留每头差异；DSA 决定当前 Query 读哪些历史 Token。**不能把 DSA 报告所说“MLA 的 MQA 计算模式”误认成“整个模型变成标准 MQA”。"
+          },
+          {
+            "title": "7.1 MQA/GQA/MHA：头映射与缓存形状",
+            "type": "formula",
+            "body": "H_q=8,d=128,B=1,S=4096,BF16。MHA Q:[B,S,8,128]、K/V各[B,S,8,128]；GQA-2 K/V各[B,S,2,128]，Q组号[0,0,0,0,1,1,1,1]；MQA K/V各[B,S,1,128]。KV_cache_bytes=B×S×2×H_kv×d×bytes。MQA/GQA每头Q独立、分数/Softmax独立；共享KV不减少主Attention的S²边数。"
+          },
+          {
+            "title": "7.1 MQA/GQA/MLA 与 DSA 两根优化轴",
+            "type": "svg",
+            "body": "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"100%\" viewBox=\"0 0 680 240\" role=\"img\"><title>MQA GQA MLA 与 DSA 的不同优化轴</title><desc>八个Query头分别使用八组、两组、一组KV，MLA缓存低秩latent和位置Key，DSA额外减少被访问的历史位置。</desc><g font-family=\"sans-serif\" font-size=\"13\"><text x=\"40\" y=\"31\" fill=\"#0C447C\">H_q=8：先决定“缓存的表示”，再决定“读哪些位置”</text><rect x=\"40\" y=\"54\" width=\"140\" height=\"56\" rx=\"8\" fill=\"#E6F1FB\" stroke=\"#185FA5\" stroke-width=\".5\"/><rect x=\"193\" y=\"54\" width=\"140\" height=\"56\" rx=\"8\" fill=\"#E6F1FB\" stroke=\"#185FA5\" stroke-width=\".5\"/><rect x=\"346\" y=\"54\" width=\"140\" height=\"56\" rx=\"8\" fill=\"#E6F1FB\" stroke=\"#185FA5\" stroke-width=\".5\"/><rect x=\"499\" y=\"54\" width=\"140\" height=\"56\" rx=\"8\" fill=\"#E1F5EE\" stroke=\"#0F6E56\" stroke-width=\".5\"/><g fill=\"#0C447C\"><text x=\"54\" y=\"78\">MHA：8 组 KV</text><text x=\"207\" y=\"78\">GQA：2 组 KV</text><text x=\"360\" y=\"78\">MQA：1 组 KV</text></g><text x=\"513\" y=\"78\" fill=\"#085041\">MLA：c_KV + k_R</text><rect x=\"40\" y=\"145\" width=\"599\" height=\"63\" rx=\"8\" fill=\"#E1F5EE\" stroke=\"#0F6E56\" stroke-width=\".5\"/><text x=\"58\" y=\"173\" fill=\"#085041\">DSA：每个 Query 从允许的 S 个历史位置里选择最多 k 个</text><text x=\"58\" y=\"195\" fill=\"#085041\">“少读位置”不等于“只缓存 k 个历史 Token”</text></g></svg>"
+          },
+          {
+            "title": "7.2 MLA：潜变量及解耦RoPE",
+            "type": "formula",
+            "body": "c_s=W_DKV x_s:[d_c]；kR_s:[d_r]；kC_s,h=W_UK,h c_s；v_s,h=W_UV,h c_s；score=(qC_h·kC_s,h+qR_h·kR_s)×scale。吸收恒等式：qC_h·(W_UK,h c_s)=(W_UK,h^T qC_h)·c_s，Σ_s a_s(W_UV,h c_s)=W_UV,h(Σ_s a_s c_s)。各头概率仍独立。MLA缓存=B×S×(d_c+d_r)×bytes；MQA decode指共享latent的吸收式计算，不等同标准MQA全头共用完整K/V。"
+          },
+          {
+            "title": "7.3 统一数值：缓存与DSA读取",
+            "type": "formula",
+            "body": "单层BF16，B=1,S=4096,H_q=8,G=2,d=128,MLA d_c=512,d_r=64；MHA=16MiB、GQA=4MiB、MQA=2MiB、MLA=4.5MiB。一次Query选k=2048的理想读取下界分别是8、2、1、2.25MiB；未包含Index Key/scale/通信/重读。两头共享c0=[1,0],c1=[0,1]，吸收后qAbs0=[2,0],qAbs1=[1,0]；各自Softmax([2,0])=[.880797,.119203]与Softmax([1,0])=[.731059,.268941]。"
+          },
+          {
+            "title": "7.4 前反向与工程边界",
+            "type": "text",
+            "body": "MQA/GQA组内各Q头的dK/dV需要累加；MLA恢复矩阵及c_s仍要反向，prefill可能物化展开K/V；DSA共享Top-k位置但逐头主分数不同。推理KV cache节省不是训练峰值或端到端加速；DSA不删除未选的历史缓存。选型须分别测Indexer/Top-k、实际Tile、KV访存、dK/dV归约、TP/CP通信与allocated/reserved峰值。"
+          },
+          {
+            "title": "7.4 可运行缓存计算",
+            "type": "code",
+            "body": "# 最小形状/缓存检查：教学口径，非真实 DSA Kernel\nB, S, Hq, G, d, dc, dr, itemsize = 1, 4096, 8, 2, 128, 512, 64, 2\nassert Hq % G == 0\nassert [h // (Hq // G) for h in range(Hq)] == [0,0,0,0,1,1,1,1]\ncache_mib = {\n    \"MHA\": B*S*2*Hq*d*itemsize / 2**20,\n    \"GQA\": B*S*2*G*d*itemsize / 2**20,\n    \"MQA\": B*S*2*d*itemsize / 2**20,\n    \"MLA\": B*S*(dc+dr)*itemsize / 2**20,\n}\nprint(cache_mib)  # MHA=16, GQA=4, MQA=2, MLA=4.5 MiB"
           },
           {
             "title": "8. 一个可手算的完整例子",
@@ -5733,6 +5782,14 @@
       "depth": "D2",
       "question_summary": "讲解清楚大模型训练里面的dsa技术，稀疏attention的一种",
       "answer_summary": "核心结论：DSA是“学习检索 + 稀疏主注意力 + 分离训练信号 + 专门内核”的组合，不是简单Mask技巧；主注意力省了交互，但Indexer、索引存储、KV缓存、反向归约与分布式通信仍需入账。"
+    },
+    {
+      "id": "L0065",
+      "at": "2026-11-04T15:30:30+08:00",
+      "concept": "DeepSeek Sparse Attention",
+      "depth": "D2",
+      "question_summary": "在原DSA章节补充MQA、GQA、MLA与DSA关系。",
+      "answer_summary": "MQA/GQA共享KV头，MLA共享潜变量且逐头恢复，DSA减少当前Query访问位置；附头映射、吸收公式、缓存量、反向边界。"
     }
   ]
 }
